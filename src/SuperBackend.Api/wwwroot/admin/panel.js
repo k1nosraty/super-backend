@@ -113,7 +113,19 @@ $("login-form").addEventListener("submit", async event => {
     }
 });
 
-$("logout").addEventListener("click", () => showLogin());
+$("logout").addEventListener("click", async () => {
+    const current = session;
+    try {
+        if (current)
+            await request(auth + "/logout", "POST", undefined, current.accessToken);
+        showLogin();
+    } catch (error) {
+        if (error.status === 401)
+            showLogin();
+        else
+            notice($("workspace-error"), error.message);
+    }
+});
 $("language").value = state.language;
 $("language").addEventListener("change", event => {
     state.language = event.currentTarget.value;

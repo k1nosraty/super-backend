@@ -57,6 +57,35 @@ namespace SuperBackend.Notes.Migrations
                     b.ToTable("Notes", "notes");
                 });
 
+            modelBuilder.Entity("SuperBackend.Notes.NoteCreateReceipt", b =>
+                {
+                    b.Property<string>("OwnerId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Key")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("OwnerId", "Key");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.ToTable("NoteCreateReceipts", "notes");
+                });
+
             modelBuilder.Entity("SuperBackend.Notes.NoteCreationStats", b =>
                 {
                     b.Property<string>("OwnerId")

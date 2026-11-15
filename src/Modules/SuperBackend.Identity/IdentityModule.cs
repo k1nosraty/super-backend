@@ -1,3 +1,4 @@
+using SuperBackend.Jobs;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.BearerToken;
@@ -52,17 +53,23 @@ public static class IdentityModule
         services.Configure<BearerTokenOptions>(IdentityConstants.BearerScheme, options =>
         {
             options.BearerTokenExpiration = TimeSpan.FromMinutes(10);
-            options.RefreshTokenExpiration = TimeSpan.FromDays(7);
+            options.RefreshTokenExpiration = AccountSessions.Lifetime;
         });
         services.Configure<DataProtectionTokenProviderOptions>(options =>
             options.TokenLifespan = TimeSpan.FromHours(2));
 
         services.AddHttpContextAccessor();
+        services.AddScoped<AccountSessions>();
+        services.AddScoped<IAccountDirectory, IdentityAccountDirectory>();
+        services.AddScoped<ISessionIssuer>(provider => provider.GetRequiredService<AccountSessions>());
+        services.AddScoped<IFederationHandoffs, FederationHandoffs>();
+        services.AddSingleton(new PrivilegedSessionPolicy(!builder.Environment.IsDevelopment() ||
+            builder.Configuration.GetValue<bool>("Identity:RequirePrivilegedMfa")));
         services.AddScoped<IFederatedAccounts, FederatedAccounts>();
         services.AddScoped<IAuthorizationHandler, AccessPolicies>();
         services.AddAuthorizationBuilder().AddPolicy(AccessPolicies.AdministrationPolicy,
             policy => policy.RequireAuthenticatedUser()
-                .AddRequirements(new Permission(AccessPolicies.AdministrationPolicy, "Manage access")));
+                .AddRequirements(new Permission(AccessPolicies.AdministrationPolicy, "Manage access", RequiresMfa: true)));
         services.AddOptions<SmtpOptions>().BindConfiguration("Smtp")
             .Validate(options => options.IsValid() &&
                 (builder.Environment.IsDevelopment() || options.UseStartTls), "Invalid SMTP settings.")
@@ -75,10 +82,15 @@ public static class IdentityModule
         {
             throw new InvalidOperationException("Identity:PublicOrigin must be an explicit origin.");
         }
+        var queueMail = builder.Configuration.GetValue<bool>("Identity:QueueMail");
+        services.AddSingleton(new IdentityMailMode(queueMail));
+        services.AddExceptionHandler<IdentityMailErrorHandler>();
+        if (queueMail)
+            services.AddScoped<IDurableJobHandler, IdentityMailHandler>();
         services.AddSingleton(new IdentityPublicOrigin(publicOrigin));
         services.AddSingleton<SmtpEmailSender>();
         services.AddSingleton<IEmailSender<Account>>(provider => provider.GetRequiredService<SmtpEmailSender>());
-        services.AddHealthChecks().AddDbContextCheck<IdentityData>("identity-db", tags: ["ready"]);
+        services.AddHealthChecks().AddMigrationReadiness<IdentityData>("identity-db");
     }
 
     public static void UseIdentitySessionValidation(this WebApplication app) =>
@@ -95,8 +107,19 @@ public static class IdentityModule
             var route = ((RouteEndpointBuilder)endpoint).RoutePattern.RawText;
             var methods = endpoint.Metadata.OfType<HttpMethodMetadata>().Single().HttpMethods;
             var post = methods.Contains(HttpMethods.Post);
-            if (route is not null && !route.StartsWith("/api/v1/auth/manage/", StringComparison.Ordinal))
+            var allowed = (route, post) switch
+            {
+                ("/api/v1/auth/register" or "/api/v1/auth/login" or "/api/v1/auth/refresh" or
+                    "/api/v1/auth/resendConfirmationEmail" or "/api/v1/auth/forgotPassword" or
+                    "/api/v1/auth/resetPassword", true) => true,
+                ("/api/v1/auth/confirmEmail", false) => true,
+                ("/api/v1/auth/manage/info", _) or ("/api/v1/auth/manage/2fa", true) => false,
+                _ => throw new InvalidOperationException($"Unreviewed Identity endpoint: {route}")
+            };
+            if (allowed)
                 endpoint.Metadata.Add(new AllowAnonymousAttribute());
+            if (post && route == "/api/v1/auth/refresh")
+                endpoint.RequestDelegate = AccountSessions.RefreshAsync;
 
             if (!allowRegistration && post && route == "/api/v1/auth/register")
             {
@@ -145,6 +168,12 @@ public static class IdentityModule
             return user is null ? Results.Unauthorized() : IdentityResponse.Empty(await users.UpdateSecurityStampAsync(user));
         }).RequireAuthorization();
 
+        auth.MapPost("/logout", async (ClaimsPrincipal principal, AccountSessions sessions, CancellationToken ct) =>
+        {
+            await sessions.RevokeAsync(principal, ct);
+            return Results.NoContent();
+        }).RequireAuthorization();
+
         ProfileEndpoints.Map(api);
         AccountInvitations.Map(AdminEndpoints.Map(api), auth);
     }
@@ -154,13 +183,13 @@ public static class IdentityModule
     {
         var hasMissingField = context.Arguments.Any(argument => argument switch
         {
-            RegisterRequest request => string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrEmpty(request.Password),
-            LoginRequest request => string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrEmpty(request.Password),
+            RegisterRequest request => EmailMissing(request.Email) || PasswordMissing(request.Password),
+            LoginRequest request => EmailMissing(request.Email) || PasswordMissing(request.Password),
             RefreshRequest request => string.IsNullOrWhiteSpace(request.RefreshToken),
-            ResendConfirmationEmailRequest request => string.IsNullOrWhiteSpace(request.Email),
-            ForgotPasswordRequest request => string.IsNullOrWhiteSpace(request.Email),
-            ResetPasswordRequest request => string.IsNullOrWhiteSpace(request.Email) ||
-                string.IsNullOrWhiteSpace(request.ResetCode) || string.IsNullOrEmpty(request.NewPassword),
+            ResendConfirmationEmailRequest request => EmailMissing(request.Email),
+            ForgotPasswordRequest request => EmailMissing(request.Email),
+            ResetPasswordRequest request => EmailMissing(request.Email) ||
+                string.IsNullOrWhiteSpace(request.ResetCode) || PasswordMissing(request.NewPassword),
             _ => false
         });
 
@@ -168,6 +197,10 @@ public static class IdentityModule
             ? ValueTask.FromResult<object?>(Results.Problem(statusCode: 400, title: context.HttpContext.RequestServices.GetRequiredService<IStringLocalizer<BackendText>>()["RequiredField"]))
             : next(context);
     }
+
+    private static bool EmailMissing(string? email) => string.IsNullOrWhiteSpace(email) || email.Length > 256;
+
+    private static bool PasswordMissing(string? password) => password is not { Length: > 0 and <= 256 };
 
     public static async Task MigrateIdentityAsync(this IServiceProvider services)
     {

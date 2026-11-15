@@ -9,6 +9,7 @@ internal sealed class OutboxMessage
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset? DispatchedAt { get; init; }
     public DateTimeOffset? ConflictAt { get; init; }
+    public Guid? ReplacementId { get; init; }
 }
 
 internal sealed record InboxReceipt(string Consumer, Guid MessageId, DateTimeOffset ProcessedAt);

@@ -1,19 +1,13 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
+using System.Data.Common;
 using SuperBackend.Jobs;
 using SuperBackend.Outbox;
 
 namespace SuperBackend.Notes;
 
-internal sealed class NoteOutboxWriter(NotesData data, ITransactionalOutbox outbox)
+internal sealed class NoteOutboxWriter(ITransactionalOutbox outbox)
 {
-    public async Task SaveCreatedAsync(Note note, CancellationToken ct)
-    {
-        await using var transaction = await data.Database.BeginTransactionAsync(ct);
-        await data.SaveChangesAsync(ct);
-        await outbox.RecordAsync(transaction.GetDbTransaction(),
+    public Task RecordCreatedAsync(Note note, DbTransaction transaction, CancellationToken ct) =>
+        outbox.RecordAsync(transaction,
             new JobSubmission(note.Id, NoteCreated.JobType, JsonSerializer.SerializeToElement(new NoteCreated(note.OwnerId))), ct);
-        await transaction.CommitAsync(ct);
-    }
 }

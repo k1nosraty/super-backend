@@ -16,7 +16,7 @@ public sealed class TenantDirectoryController(ITenantDirectory directory) : Cont
     [HttpPost]
     [Authorize(Policy = TenancyModule.Manage)]
     public async Task<ActionResult<TenantSummary>> Create(NewTenant input, CancellationToken ct) =>
-        StatusCode(201, await directory.CreateAsync(input.Name, ct));
+        StatusCode(201, await directory.CreateAsync(input.Name, User.UserId(), ct));
 
     [HttpPut("{tenantId:guid}/members/{userId}")]
     [Authorize(Policy = TenancyModule.Manage)]
@@ -28,11 +28,17 @@ public sealed class TenantDirectoryController(ITenantDirectory directory) : Cont
     public Task<IActionResult> RemoveMembership(Guid tenantId, string userId, CancellationToken ct) =>
         SetAsync(tenantId, userId, null, ct);
 
+    [HttpPut("{tenantId:guid}/status")]
+    [Authorize(Policy = TenancyModule.Manage)]
+    public async Task<IActionResult> SetStatus(Guid tenantId, TenantStatus input, CancellationToken ct) =>
+        await directory.SetStatusAsync(tenantId, input.Active!.Value, User.UserId(), input.Reason, ct)
+            ? NoContent() : NotFound();
+
     private async Task<IActionResult> SetAsync(Guid tenantId, string userId, TenantAccess? access, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(userId) || userId.Length > 128)
             return BadRequest();
-        return await directory.SetMembershipAsync(tenantId, userId, access, ct) ? NoContent() : NotFound();
+        return await directory.SetMembershipAsync(tenantId, userId, access, User.UserId(), ct) ? NoContent() : NotFound();
     }
 
 }

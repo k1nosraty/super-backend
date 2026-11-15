@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Builder;
@@ -215,7 +216,9 @@ internal static class AdminEndpoints
             Action = action,
             RoleId = roleId,
             UserId = userId,
-            Permission = permission
+            Permission = permission,
+            Reason = action,
+            TraceId = Activity.Current?.TraceId.ToString()
         });
         await db.SaveChangesAsync(ct);
     }

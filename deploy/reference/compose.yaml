@@ -1,0 +1,103 @@
+services:
+  database:
+    image: postgres:18.6
+    environment:
+      POSTGRES_DB: superbackend
+      POSTGRES_USER: sb_bootstrap
+      POSTGRES_PASSWORD: ${DB_BOOTSTRAP_PASSWORD:?set the database bootstrap secret}
+      MIGRATOR_PASSWORD: ${DB_MIGRATOR_PASSWORD:?set the migrator secret}
+      RUNTIME_PASSWORD: ${DB_RUNTIME_PASSWORD:?set the runtime secret}
+      TENANT_PASSWORD: ${DB_TENANT_PASSWORD:?set the tenant secret}
+    volumes:
+      - database:/var/lib/postgresql
+      - ./init-roles.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "sb_bootstrap", "-d", "superbackend"]
+      interval: 2s
+      timeout: 2s
+      retries: 25
+    networks: [backend]
+  migrate:
+    image: ${API_IMAGE:?set the immutable API image reference}
+    command: ["--migrate"]
+    environment:
+      <<: &app
+        ASPNETCORE_ENVIRONMENT: Production
+        AllowedHosts: ${PUBLIC_HOST:?set the public host}
+        Identity__PublicOrigin: ${PUBLIC_ORIGIN:?set the HTTPS origin}
+        DataProtection__KeyDirectory: /keys
+        Http__KnownProxies__0: 172.29.81.10
+        Smtp__Host: ${SMTP_HOST:?set the SMTP provider}
+        Smtp__Port: ${SMTP_PORT:-587}
+        Smtp__From: ${SMTP_FROM:?set the sender address}
+        Smtp__Username: ${SMTP_USERNAME:-}
+        Smtp__Password: ${SMTP_PASSWORD:-}
+        Smtp__UseStartTls: 'true'
+        Modules__Notes: ${MODULE_NOTES:-false}
+        Modules__Jobs: ${MODULE_JOBS:-false}
+        Modules__Outbox: ${MODULE_OUTBOX:-false}
+        Modules__Tenancy: ${MODULE_TENANCY:-false}
+        Modules__Federation: ${MODULE_FEDERATION:-false}
+        Modules__AdminPanel: ${MODULE_ADMIN:-true}
+        Notes__PublishCreatedJobs: ${PUBLISH_NOTE_JOBS:-false}
+        Identity__QueueMail: ${QUEUE_MAIL:-false}
+        Oidc__Authority: ${OIDC_AUTHORITY:-}
+        Oidc__Issuer: ${OIDC_ISSUER:-}
+        Oidc__ClientId: ${OIDC_CLIENT_ID:-}
+        Oidc__ClientSecret: ${OIDC_CLIENT_SECRET:-}
+        Oidc__RequiredAcr: ${OIDC_REQUIRED_ACR:-}
+      ConnectionStrings__Main: ${MIGRATOR_CONNECTION:?set the migrator connection}
+      ConnectionStrings__TenantData: ${TENANT_CONNECTION:?set the tenant connection}
+    volumes:
+      - keys:/keys
+    networks: [backend]
+    depends_on:
+      database:
+        condition: service_healthy
+  grants:
+    image: postgres:18.6
+    entrypoint: ["psql", "-v", "ON_ERROR_STOP=1", "-f", "/grants.sql"]
+    environment:
+      PGHOST: database
+      PGDATABASE: superbackend
+      PGUSER: sb_migrator
+      PGPASSWORD: ${DB_MIGRATOR_PASSWORD:?set the migrator secret}
+    volumes:
+      - ./grants.sql:/grants.sql:ro
+    networks: [backend]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  api:
+    image: ${API_IMAGE:?set the immutable API image reference}
+    environment:
+      <<: *app
+      ConnectionStrings__Main: ${RUNTIME_CONNECTION:?set the runtime connection}
+      ConnectionStrings__TenantData: ${TENANT_CONNECTION:?set the tenant connection}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    volumes:
+      - keys:/keys
+    networks: [backend]
+    depends_on:
+      grants:
+        condition: service_completed_successfully
+  ingress:
+    image: public.ecr.aws/docker/library/nginx:stable-alpine@sha256:901e593c95dc85f5a729f5765516321366ef4ac401821431d408897e95287d0a
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${HTTPS_PORT:-8443}:8443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${TLS_DIRECTORY:?set the TLS certificate directory}:/tls:ro
+    networks:
+      backend:
+        ipv4_address: 172.29.81.10
+    depends_on:
+      - api
+networks:
+  backend:
+    ipam:
+      config:
+        - subnet: 172.29.81.0/24
+volumes:
+  keys:
+  database:

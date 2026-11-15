@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Localization;
 using SuperBackend.Platform;
 
@@ -27,16 +28,15 @@ internal static class AccountInvitations
         SmtpEmailSender sender, IdentityData db, TimeProvider time, IStringLocalizer<BackendText> text, CancellationToken ct)
     {
         var email = input.Email.Trim();
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
         var account = await users.FindByEmailAsync(email);
         if (account is null)
         {
-            await using var transaction = await db.Database.BeginTransactionAsync(ct);
             account = new Account { Email = email, UserName = email };
             var result = await users.CreateAsync(account);
             if (!result.Succeeded)
                 return IdentityResponse.Empty(result);
             await AdminEndpoints.AuditAsync(db, time, actor, "user.invited", null, ct, account.Id);
-            await transaction.CommitAsync(ct);
         }
         else if (account.EmailConfirmed || account.IsDisabled || await users.HasPasswordAsync(account))
         {
@@ -44,7 +44,12 @@ internal static class AccountInvitations
         }
 
         var code = await users.GenerateUserTokenAsync(account, TokenOptions.DefaultProvider, Purpose);
-        await sender.SendInvitationAsync(email, WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code)));
+        var encoded = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
+        if (sender.Queued)
+            await sender.SendInvitationAsync(email, encoded, transaction.GetDbTransaction(), ct);
+        await transaction.CommitAsync(ct);
+        if (!sender.Queued)
+            await sender.SendInvitationAsync(email, encoded, ct: ct);
         return Results.NoContent();
     }
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# != 1 || ! $1 =~ ^[A-Z][A-Za-z0-9]{0,63}$ ]]; then
-    printf 'Usage: %s ServiceName (PascalCase, up to 64 characters)\n' "$0" >&2
+if [[ $# -lt 1 || $# -gt 2 || ! $1 =~ ^[A-Z][A-Za-z0-9]{0,63}$ || ( $# == 2 && $2 != --minimal ) ]]; then
+    printf 'Usage: %s ServiceName [--minimal] (PascalCase, up to 64 characters)\n' "$0" >&2
     exit 2
 fi
 
@@ -43,12 +43,12 @@ cp "$api" "$staging/api.csproj"
 cp "$solution" "$staging/solution.slnx"
 cp "$registration" "$staging/registration.cs"
 
-python3 - "$project" "$service" "$staging/module" "$staging/registration.next.cs" "$registration" <<'PY'
+python3 - "$project" "$service" "$staging/module" "$staging/registration.next.cs" "$registration" "${2:-}" <<'PY'
 from pathlib import Path
 import re
 import sys
 
-project, service, target, next_registration, registration = sys.argv[1:]
+project, service, target, next_registration, registration, profile = sys.argv[1:]
 route = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "-", service).lower()
 values = {"__ROOT__": project, "__SERVICE__": service, "__ROUTE__": route}
 
@@ -66,9 +66,22 @@ statement = f"        global::{project}.{service}.{service}Module.Register(build
 if statement in current:
     raise SystemExit("The service is already registered.")
 for source in template.rglob("*.tmpl"):
-    destination = Path(target) / render(str(source.relative_to(template)).removesuffix(".tmpl"))
+    relative = source.relative_to(template)
+    content = source.read_text()
+    if profile == "--minimal":
+        if relative.parts[0] in {"Contracts", "Models", "Services"}:
+            continue
+        content = content.replace(
+            "        builder.Services.AddScoped<I__SERVICE__Service, __SERVICE__Service>();\n", ""
+        ).replace(
+            "(I__SERVICE__Service service) : ControllerBase", " : ControllerBase"
+        ).replace(
+            "public __SERVICE__Status Get() => service.GetStatus();",
+            'public IActionResult Get() => Ok(new { service = "__SERVICE__", status = "available" });'
+        )
+    destination = Path(target) / render(str(relative).removesuffix(".tmpl"))
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(render(source.read_text()))
+    destination.write_text(render(content))
 Path(next_registration).write_text(current.replace(marker, "\n".join((statement, marker))))
 PY
 

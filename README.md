@@ -61,7 +61,7 @@ For concurrent Compose stacks, give each stack a unique `COMPOSE_PROJECT_NAME` a
 
 - Public account endpoints under `/api/v1/auth` cover `register`, `confirmEmail`, `resendConfirmationEmail`, `login`, `refresh`, `forgotPassword`, `resetPassword`, and `accept-invitation`. The public registration switch leaves invitation acceptance available.
 - An administrator sends an invitation with `POST /api/v1/admin/invitations` and `{"email":"user@example.test"}`. The recipient sends `email`, `code`, and `password` to `POST /api/v1/auth/accept-invitation`. The code expires after two hours and is single-use. If SMTP delivery fails, submitting the same pending invitation resends it.
-- Login takes `email` and `password`, plus `twoFactorCode` or `twoFactorRecoveryCode` if needed. Pass the returned access token as `Authorization: Bearer <accessToken>`; send `refreshToken` to renew it. Access and refresh tokens expire after 10 minutes and seven days, respectively. A previously issued refresh token stays valid until it expires or sessions are revoked.
+- Login takes `email` and `password`, plus `twoFactorCode` or `twoFactorRecoveryCode` if needed. Pass the returned access token as `Authorization: Bearer <accessToken>`; send `refreshToken` to renew it. Access and refresh tokens expire after 10 minutes and seven days, respectively. Refresh tokens rotate once per session generation. A consumed token returns 401 on replay. Use `POST /api/v1/auth/logout` to revoke the current session.
 - Use `GET /api/v1/me` and `PUT /api/v1/me` to read or update the profile. The update body contains `displayName`. Use `POST /api/v1/auth/logout-all` to revoke all sessions.
 - Use `GET /api/v1/auth/manage/info` for account details and `POST /api/v1/auth/manage/info` for email or password changes. Account changes and `POST /api/v1/auth/manage/2fa` require the `X-Current-Password` header. For TOTP, fetch the shared key with an empty body, sign in again if a new key was generated, then send `enable: true` and a current `twoFactorCode`. Store the returned recovery codes securely.
 - Under `/api/v1/admin`, manage roles using `/roles` and `/roles/{roleId}`. Grant or revoke a named permission with PUT or DELETE on `/roles/{roleId}/permissions/{permission}`. Assign or remove the role from a user with PUT or DELETE on `/users/{userId}/roles/{roleId}`. Use `GET /permissions` to list permissions declared by enabled modules.
@@ -77,6 +77,7 @@ Use `./scripts/new-service.sh InventoryReports` to scaffold and register an opti
 - [Transactional Outbox and consumer deduplication, including Notes](docs/TRANSACTIONAL-OUTBOX.md)
 - [Architecture, folder layout, and adding a module](docs/ARCHITECTURE.md)
 - [Lifecycle coverage, deployment configuration, databases, and recovery](docs/OPERATIONS.md)
+- [Release tasks and acceptance criteria](docs/RELEASE-TASKS.md) and [verification evidence](docs/RELEASE-EVIDENCE.md)
 - [ASP.NET Core Identity bearer tokens](https://learn.microsoft.com/en-us/aspnet/core/security/authentication/identity-api-authorization?view=aspnetcore-10.0)
 
 Run the integration suite against local PostgreSQL and Mailpit:
@@ -88,3 +89,7 @@ dotnet test --configuration Release --no-restore
 ```
 
 The suite creates a temporary database and exercises the HTTP API and SMTP flows. Tests accept `SUPERBACKEND_TEST_DATABASE`, `SUPERBACKEND_TEST_SMTP_HOST`, `SUPERBACKEND_TEST_SMTP_PORT`, and `SUPERBACKEND_TEST_MAILPIT` for alternate fixtures.
+
+Generate with `./scripts/new-project.sh --minimal Project.Name` to start with identity and health endpoints. The reference profile enables the Notes example and admin panel in Development. Both include the optional module source so you can enable modules independently. If generation is interrupted, inspect the partial output, then use a new output directory or intentionally remove the partial directory before retrying. The generator refuses to overwrite a path.
+
+Run `./scripts/new-service.sh InventoryReports --minimal` for a permission-protected module with a controller and registration. Omit `--minimal` to include the example service contract, implementation, and response model. Enable it with `Modules__InventoryReports=true` and grant the generated `inventory-reports.read` permission. For new HTTP features, document response status and schemas in OpenAPI and use the integration fixture to check permission denial and successful requests.

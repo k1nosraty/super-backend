@@ -10,9 +10,25 @@ namespace SuperBackend.Identity;
 internal sealed class AccountSignInManager(UserManager<Account> users, IHttpContextAccessor context,
     IUserClaimsPrincipalFactory<Account> principals, IOptions<IdentityOptions> options,
     ILogger<SignInManager<Account>> logger, IAuthenticationSchemeProvider schemes,
-    IUserConfirmation<Account> confirmation)
+    IUserConfirmation<Account> confirmation, AccountSessions sessions)
     : SignInManager<Account>(users, context, principals, options, logger, schemes, confirmation)
 {
+    public override async Task SignInWithClaimsAsync(Account user, AuthenticationProperties? properties,
+        IEnumerable<Claim> additionalClaims)
+    {
+        if (AuthenticationScheme != IdentityConstants.BearerScheme)
+        {
+            await base.SignInWithClaimsAsync(user, properties, additionalClaims);
+            return;
+        }
+
+        var principal = await CreateUserPrincipalAsync(user);
+        ((ClaimsIdentity)principal.Identity!).AddClaims(additionalClaims);
+        var session = await sessions.StartAsync(principal, Context.RequestAborted);
+        await Context.SignInAsync(AuthenticationScheme, session, properties);
+        Context.User = session;
+    }
+
     public override Task<bool> CanSignInAsync(Account user) =>
         user.IsDisabled ? Task.FromResult(false) : base.CanSignInAsync(user);
 

@@ -119,9 +119,71 @@ public sealed class NotesOutboxTests(BackendDatabase database) : IClassFixture<B
             """, ownerId: ownerId));
     }
 
-    private async Task PrepareAsync()
+    [Fact]
+    public async Task ConcurrentRequestsWithOneIdempotencyKeyPublishOneEvent()
     {
+        await using var isolated = new BackendDatabase();
+        await isolated.InitializeAsync();
+        await PrepareAsync(isolated);
+        await using var app = isolated.CreateApp(Settings());
+        using var first = CreateClient(app);
+        using var second = CreateClient(app);
+        await AuthenticateAsync(first, AdminEmail);
+        await AuthenticateAsync(second, AdminEmail);
+        first.DefaultRequestHeaders.Add("Idempotency-Key", "concurrent-note");
+        second.DefaultRequestHeaders.Add("Idempotency-Key", "concurrent-note");
+        var payload = new { title = "Exactly one committed note", body = "" };
+        var notes = await Task.WhenAll(
+            ReadAsync<CreatedNote>(first.PostAsJsonAsync(Notes, payload), HttpStatusCode.Created),
+            ReadAsync<CreatedNote>(second.PostAsJsonAsync(Notes, payload), HttpStatusCode.Created));
+        Assert.Equal(notes[0].Id, notes[1].Id);
+        await ExpectAsync(second.PostAsJsonAsync(Notes, new { title = "Changed payload", body = "" }), HttpStatusCode.Conflict);
+        Assert.Equal(1L, await ScalarAsync<long>("""
+            SELECT count(*) FROM outbox."Messages" WHERE "Id" = @id AND "Type" = 'notes.created'
+            """, notes[0].Id, connectionString: isolated.DatabaseConnection));
+    }
+
+    [Fact]
+    public async Task OperatorsCanRedriveADifferentTypeCollisionOnlyOnceAndCannotOverrideInbox()
+    {
+        await PrepareAsync();
         await using var app = database.CreateApp(Settings());
+        using var client = CreateClient(app);
+        await AuthenticateAsync(client, AdminEmail);
+        var eligible = Guid.NewGuid();
+        var processed = Guid.NewGuid();
+        await ExecuteAsync($"""
+            INSERT INTO outbox."Messages" ("Id", "Type", "Payload", "MaxAttempts", "CreatedAt", "ConflictAt")
+            VALUES ('{eligible}', 'test.redrive', jsonb_build_object(), 5, now(), now()),
+                   ('{processed}', 'test.redrive', jsonb_build_object(), 5, now(), now());
+            INSERT INTO jobs."Jobs" ("Id", "Type", "Payload", "Status", "Attempts", "MaxAttempts", "AvailableAt")
+            VALUES ('{eligible}', 'different.type', jsonb_build_object(), 'succeeded', 1, 5, now());
+            INSERT INTO outbox."InboxReceipts" ("MessageId", "Consumer", "ProcessedAt")
+            VALUES ('{processed}', 'test.redrive', now());
+            """);
+        const string root = "/api/v1/admin/outbox";
+        var listing = await ReadAsync<Conflict[]>(client.GetAsync($"{root}?status=conflict&id={eligible}"), HttpStatusCode.OK);
+        Assert.Equal(eligible, Assert.Single(listing).Id);
+        await ExpectAsync(client.PostAsJsonAsync($"{root}/{processed}/redrive", new { reason = "Investigated collision" }),
+            HttpStatusCode.Conflict);
+
+        var accepted = await ReadAsync<Conflict>(client.PostAsJsonAsync($"{root}/{eligible}/redrive", new { reason = "Investigated collision" }),
+            HttpStatusCode.Accepted);
+        Assert.NotEqual(eligible, accepted.Id);
+        await ExpectAsync(client.PostAsJsonAsync($"{root}/{eligible}/redrive", new { reason = "Repeated action" }), HttpStatusCode.Conflict);
+        Assert.Equal(1L, await ScalarAsync<long>(
+            """
+            SELECT count(*) FROM identity."AccessAudits"
+            WHERE "Action" = 'outbox.redriven' AND "UserId" LIKE @owner AND "Reason" = 'Investigated collision'
+              AND "ActorId" IS NOT NULL AND "TraceId" IS NOT NULL
+            """, ownerId: $"{eligible}/%"));
+    }
+
+    private sealed record Conflict(Guid Id);
+
+    private async Task PrepareAsync(BackendDatabase? testDatabase = null)
+    {
+        await using var app = (testDatabase ?? database).CreateApp(Settings());
         await app.Services.MigrateJobsAsync();
         await app.Services.MigrateOutboxAsync();
     }
@@ -148,9 +210,9 @@ public sealed class NotesOutboxTests(BackendDatabase database) : IClassFixture<B
         await command.ExecuteNonQueryAsync();
     }
 
-    private async Task<T> ScalarAsync<T>(string sql, Guid? id = null, string? ownerId = null)
+    private async Task<T> ScalarAsync<T>(string sql, Guid? id = null, string? ownerId = null, string? connectionString = null)
     {
-        await using var connection = new NpgsqlConnection(database.DatabaseConnection);
+        await using var connection = new NpgsqlConnection(connectionString ?? database.DatabaseConnection);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(sql, connection);
         if (id.HasValue)

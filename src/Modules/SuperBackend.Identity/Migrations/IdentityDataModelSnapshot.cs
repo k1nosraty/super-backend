@@ -177,7 +177,13 @@ namespace SuperBackend.Identity.Migrations
                     b.Property<string>("Permission")
                         .HasColumnType("text");
 
+                    b.Property<string>("Reason")
+                        .HasColumnType("text");
+
                     b.Property<string>("RoleId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TraceId")
                         .HasColumnType("text");
 
                     b.Property<string>("UserId")
@@ -260,6 +266,55 @@ namespace SuperBackend.Identity.Migrations
                     b.ToTable("AspNetUsers", "identity");
                 });
 
+            modelBuilder.Entity("SuperBackend.Identity.AccountSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Generation")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Sessions", "identity");
+                });
+
+            modelBuilder.Entity("SuperBackend.Identity.FederationHandoff", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExternalKey")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.ToTable("FederationHandoffs", "identity");
+                });
+
             modelBuilder.Entity("SuperBackend.Identity.RolePermission", b =>
                 {
                     b.Property<string>("RoleId")
@@ -317,6 +372,15 @@ namespace SuperBackend.Identity.Migrations
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<string>", b =>
+                {
+                    b.HasOne("SuperBackend.Identity.Account", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("SuperBackend.Identity.AccountSession", b =>
                 {
                     b.HasOne("SuperBackend.Identity.Account", null)
                         .WithMany()

@@ -323,7 +323,7 @@ public sealed class BackendTests(BackendDatabase database) : IClassFixture<Backe
             (response.IsSuccessStatusCode ? "" : await response.Content.ReadAsStringAsync()));
     }
 
-    private static async Task<string> ReadMailAsync(string recipient, string subject)
+    internal static async Task<string> ReadMailAsync(string recipient, string subject)
     {
         using var inbox = new HttpClient
         {

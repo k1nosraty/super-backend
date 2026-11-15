@@ -24,6 +24,8 @@ internal sealed class TestOidcProvider : IAsyncDisposable
     public string Issuer { get; private set; } = "";
     public string CurrentSubject { get; set; } = Subject;
     public string CurrentAcr { get; set; } = Acr;
+    public string? TokenIssuer { get; set; }
+    public string? TokenAudience { get; set; }
     public bool CodeVerified { get; private set; }
 
     public TestOidcProvider()
@@ -77,8 +79,8 @@ internal sealed class TestOidcProvider : IAsyncDisposable
             CodeVerified = true;
             var jwt = new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
             {
-                Issuer = Issuer,
-                Audience = Client,
+                Issuer = TokenIssuer ?? Issuer,
+                Audience = TokenAudience ?? Client,
                 Expires = DateTime.UtcNow.AddMinutes(5),
                 SigningCredentials = new SigningCredentials(new RsaSecurityKey(_rsa) { KeyId = "integration" },
                     SecurityAlgorithms.RsaSha256),

@@ -20,18 +20,48 @@ internal static class ApiOpenApi
                 Scheme = "bearer",
                 Description = "Access token returned by the Identity login endpoint."
             };
+            document.Components.SecuritySchemes["OidcExchange"] = new OpenApiSecurityScheme
+            {
+                Type = SecuritySchemeType.ApiKey,
+                Name = "SuperBackend.OidcExchange",
+                In = ParameterLocation.Cookie,
+                Description = "Short-lived browser ticket issued by the successful provider callback."
+            };
             return Task.CompletedTask;
         });
         options.AddOperationTransformer((operation, context, _) =>
         {
-            if (!context.Description.ActionDescriptor.EndpointMetadata.OfType<IAllowAnonymous>().Any())
+            var path = context.Description.RelativePath?.TrimEnd('/');
+            var scheme = path is "api/v1/oidc/session" or "api/v1/oidc/exchange" ? "OidcExchange"
+                : context.Description.ActionDescriptor.EndpointMetadata.OfType<IAllowAnonymous>().Any() ? null : "Bearer";
+            if (scheme is not null)
             {
                 operation.Security = [new OpenApiSecurityRequirement
                 {
-                    [new OpenApiSecuritySchemeReference("Bearer", context.Document)] = []
+                    [new OpenApiSecuritySchemeReference(scheme, context.Document)] = []
                 }];
             }
+
+            if (path == "api/v1/oidc/exchange")
+                AddHeader(operation, "Origin", required: true, "The configured first-party HTTPS origin.");
+            if (path == "api/v1/notes" && context.Description.HttpMethod == "POST")
+                AddHeader(operation, "Idempotency-Key", required: false, "A stable request key scoped to the note owner.");
+            if (path == "api/v1/tenants/{tenantId}/documents/{id}" && context.Description.HttpMethod == "PUT")
+                AddHeader(operation, "If-Match", required: true, "The strong ETag returned by GET.");
             return Task.CompletedTask;
+        });
+    }
+
+    private static void AddHeader(OpenApiOperation operation, string name, bool required, string description)
+    {
+        operation.Parameters ??= [];
+        operation.Parameters.Add(new OpenApiParameter
+        {
+            Name = name,
+            In = ParameterLocation.Header,
+            Required = required,
+            Description = description,
+            Schema = new OpenApiSchema { Type = JsonSchemaType.String }
         });
     }
 }

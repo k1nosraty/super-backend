@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore.Storage;
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Builder;
@@ -23,7 +26,7 @@ public static class NotesModule
         services.AddAuthorizationBuilder()
             .AddPermission(Read, "Read your own notes")
             .AddPermission(Write, "Create, edit and delete your own notes");
-        services.AddHealthChecks().AddDbContextCheck<NotesData>("notes-db", tags: ["ready"]);
+        services.AddHealthChecks().AddMigrationReadiness<NotesData>("notes-db");
     }
 
     public static void AddNotesOutbox(this IServiceCollection services, bool publishCreatedJobs)
@@ -38,7 +41,8 @@ public static class NotesModule
         var notes = app.MapGroup("/api/v1/notes").WithTags("Notes");
         notes.MapGet("/", ListAsync).RequireAuthorization(Read);
         notes.MapGet("/{id:guid}", GetAsync).WithName("GetNote").RequireAuthorization(Read);
-        notes.MapPost("/", CreateAsync).RequireAuthorization(Write).ValidateBody<NoteInput>();
+        notes.MapPost("/", CreateAsync).RequireAuthorization(Write).ValidateBody<NoteInput>()
+            .Produces<NoteView>(StatusCodes.Status201Created).ProducesProblem(401).ProducesProblem(403).ProducesProblem(409);
         notes.MapPut("/{id:guid}", UpdateAsync).RequireAuthorization(Write).ValidateBody<UpdateNote>();
         notes.MapDelete("/{id:guid}", DeleteAsync).RequireAuthorization(Write);
     }
@@ -62,7 +66,7 @@ public static class NotesModule
     }
 
     private static async Task<IResult> CreateAsync(NoteInput input, ClaimsPrincipal user, NotesData db,
-        TimeProvider time, [FromServices] NoteOutboxWriter? outbox, CancellationToken ct)
+        TimeProvider time, [FromServices] NoteOutboxWriter? outbox, HttpRequest request, CancellationToken ct)
     {
         var note = new Note
         {
@@ -73,13 +77,47 @@ public static class NotesModule
             CreatedAt = time.GetUtcNow(),
             Version = Guid.NewGuid()
         };
-        db.Notes.Add(note);
-        if (outbox is null)
-            await db.SaveChangesAsync(ct);
-        else
-            await outbox.SaveCreatedAsync(note, ct);
+        var keyHeader = request.Headers["Idempotency-Key"];
+        if (keyHeader.Count > 1 || (keyHeader.Count == 1 &&
+            (keyHeader[0] is not { Length: > 0 and <= 128 } value || value.Any(character => character < '!' || character > '~'))))
+            return Results.Problem(statusCode: 400, title: "Invalid Idempotency-Key.");
 
-        return Results.CreatedAtRoute("GetNote", new { note.Id }, ToView(note));
+        var key = keyHeader.Count == 0 ? null : keyHeader[0];
+        if (key is null && outbox is null)
+        {
+            db.Notes.Add(note);
+            await db.SaveChangesAsync(ct);
+            return Created(ToView(note));
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var response = ToView(note);
+        if (key is not null)
+        {
+            var hash = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new NoteInput(note.Title, note.Body))));
+            var responseJson = JsonSerializer.Serialize(response);
+            var inserted = await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO notes."NoteCreateReceipts" ("OwnerId", "Key", "RequestHash", "Body", "CreatedAt")
+                VALUES ({note.OwnerId}, {key}, {hash}, CAST({responseJson} AS jsonb), now())
+                ON CONFLICT ("OwnerId", "Key") DO NOTHING
+                """, ct);
+            if (inserted == 0)
+            {
+                var receipt = await db.NoteCreateReceipts.SingleAsync(entry => entry.OwnerId == note.OwnerId && entry.Key == key, ct);
+                return receipt.RequestHash == hash
+                    ? Created(JsonSerializer.Deserialize<NoteView>(receipt.Body)!)
+                    : Results.Problem(statusCode: 409, title: "The idempotency key belongs to a different request.");
+            }
+        }
+
+        db.Notes.Add(note);
+        await db.SaveChangesAsync(ct);
+        if (outbox is not null)
+            await outbox.RecordCreatedAsync(note, transaction.GetDbTransaction(), ct);
+        await transaction.CommitAsync(ct);
+        return Created(response);
+
+        static IResult Created(NoteView view) => Results.CreatedAtRoute("GetNote", new { view.Id }, view);
     }
 
     private static async Task<IResult> UpdateAsync(Guid id, UpdateNote input, ClaimsPrincipal user, NotesData db,

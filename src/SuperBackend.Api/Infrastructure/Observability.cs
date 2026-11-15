@@ -1,3 +1,4 @@
+using SuperBackend.Platform;
 using System.Diagnostics;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
@@ -26,7 +27,7 @@ internal static class Observability
         builder.Services.AddOpenTelemetry()
             .ConfigureResource(resource => resource.AddService(serviceName))
             .WithTracing(traces => traces.AddAspNetCoreInstrumentation().AddProcessor(new RemoveQueryTag()).AddOtlpExporter())
-            .WithMetrics(metrics => metrics.AddAspNetCoreInstrumentation().AddMeter("System.Runtime").AddOtlpExporter());
+            .WithMetrics(metrics => metrics.AddAspNetCoreInstrumentation().AddMeter("System.Runtime", OperationsTelemetry.MeterName).AddOtlpExporter());
     }
 
     private sealed class RemoveQueryTag : BaseProcessor<Activity>

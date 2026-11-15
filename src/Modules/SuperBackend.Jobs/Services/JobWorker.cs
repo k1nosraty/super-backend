@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using SuperBackend.Platform;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -8,6 +10,8 @@ namespace SuperBackend.Jobs;
 internal sealed class JobWorker(IServiceScopeFactory scopes, QueueSettings settings, ILogger<JobWorker> logger)
     : BackgroundService
 {
+    private long _lastLeaseSweep;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -23,6 +27,7 @@ internal sealed class JobWorker(IServiceScopeFactory scopes, QueueSettings setti
             }
             catch (Exception exception)
             {
+                OperationsTelemetry.Record("jobs", "store-error", 0);
                 logger.LogWarning("Job store operation failed ({ErrorType}); polling will resume.",
                     exception.GetType().Name);
             }
@@ -35,27 +40,30 @@ internal sealed class JobWorker(IServiceScopeFactory scopes, QueueSettings setti
     {
         await using var scope = scopes.CreateAsyncScope();
         var queue = scope.ServiceProvider.GetRequiredService<PostgresJobQueue>();
-        var lease = await queue.ClaimAsync(settings.Lease, stoppingToken);
+        if (_lastLeaseSweep == 0 || Stopwatch.GetElapsedTime(_lastLeaseSweep) >= TimeSpan.FromSeconds(30))
+        {
+            var expired = await queue.ExpireExhaustedLeasesAsync(stoppingToken);
+            if (expired < 100)
+                _lastLeaseSweep = Stopwatch.GetTimestamp();
+        }
+
+        var handlers = scope.ServiceProvider.GetServices<IDurableJobHandler>()
+            .ToDictionary(handler => handler.Type, StringComparer.Ordinal);
+        if (handlers.Count == 0)
+            return false;
+        var lease = await queue.ClaimAsync(settings.Lease, handlers.Keys.ToArray(), stoppingToken);
         if (lease is null)
             return false;
 
+        var started = Stopwatch.GetTimestamp();
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         deadline.CancelAfter(settings.Timeout);
         string? error = null;
         try
         {
-            var handler = scope.ServiceProvider.GetServices<IDurableJobHandler>()
-                .SingleOrDefault(item => item.Type == lease.Type);
-            if (handler is null)
-            {
-                error = "missing-handler";
-            }
-            else
-            {
-                using var payload = JsonDocument.Parse(lease.Payload);
-                await handler.HandleAsync(new JobExecution(lease.Id, payload.RootElement, lease.Attempts), deadline.Token);
-                deadline.Token.ThrowIfCancellationRequested();
-            }
+            using var payload = JsonDocument.Parse(lease.Payload);
+            await handlers[lease.Type].HandleAsync(new JobExecution(lease.Id, payload.RootElement, lease.Attempts), deadline.Token);
+            deadline.Token.ThrowIfCancellationRequested();
         }
         catch (OperationCanceledException) when (deadline.IsCancellationRequested)
         {
@@ -71,7 +79,9 @@ internal sealed class JobWorker(IServiceScopeFactory scopes, QueueSettings setti
 
         stoppingToken.ThrowIfCancellationRequested();
         var backoff = TimeSpan.FromSeconds(Math.Min(300, settings.Retry.TotalSeconds * Math.Pow(2, lease.Attempts - 1)));
-        await queue.FinishAsync(lease, error, backoff, stoppingToken);
+        var changed = await queue.FinishAsync(lease, error, backoff, stoppingToken);
+        OperationsTelemetry.Record("jobs", changed == 0 ? "lease-lost" : error ?? "succeeded",
+            Stopwatch.GetElapsedTime(started).TotalSeconds);
         return true;
     }
 }

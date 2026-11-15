@@ -20,8 +20,8 @@ public static class JobsModule
         services.AddScoped<IJobOperations>(provider => provider.GetRequiredService<PostgresJobQueue>());
         services.AddScoped<IDurableJobQueue>(provider => provider.GetRequiredService<PostgresJobQueue>());
         services.AddAuthorizationBuilder().AddPermission(Inspect, "Inspect job status")
-            .AddPermission(Retry, "Requeue a dead job");
-        services.AddHealthChecks().AddDbContextCheck<JobsData>("jobs-db", tags: ["ready"]);
+            .AddPermission(Retry, "Requeue a dead job", requiresMfa: true);
+        services.AddHealthChecks().AddMigrationReadiness<JobsData>("jobs-db");
 
         var poll = configuration.GetValue("Jobs:PollMilliseconds", 500);
         var lease = configuration.GetValue("Jobs:LeaseSeconds", 60);

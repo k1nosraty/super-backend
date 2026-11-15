@@ -4,14 +4,14 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace SuperBackend.Platform;
 
-public sealed record Permission(string Name, string Description) : IAuthorizationRequirement;
+public sealed record Permission(string Name, string Description, bool RequiresMfa = false) : IAuthorizationRequirement;
 
 public static class Permissions
 {
     public static AuthorizationBuilder AddPermission(this AuthorizationBuilder builder,
-        string name, string description)
+        string name, string description, bool requiresMfa = false)
     {
-        var permission = new Permission(name, description);
+        var permission = new Permission(name, description, requiresMfa);
         builder.Services.AddSingleton(permission);
         return builder.AddPolicy(name, policy => policy
             .RequireAuthenticatedUser()

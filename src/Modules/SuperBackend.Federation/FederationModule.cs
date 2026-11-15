@@ -25,7 +25,7 @@ public static class FederationModule
             !IsSafeUri(authority, allowHttp))
             throw new InvalidOperationException("Oidc:Authority must use HTTPS or a development loopback HTTP address.");
 
-        var issuer = section["Issuer"] ?? authority.AbsoluteUri.TrimEnd('/');
+        var issuer = string.IsNullOrWhiteSpace(section["Issuer"]) ? authority.AbsoluteUri.TrimEnd('/') : section["Issuer"]!;
         if (!Uri.TryCreate(issuer, UriKind.Absolute, out var issuerUri) || !IsSafeUri(issuerUri, allowHttp))
             throw new InvalidOperationException("Oidc:Issuer must be a trusted issuer URL.");
 
@@ -96,10 +96,14 @@ public static class FederationModule
             context.Properties!.Items["local-user"] = localId;
             context.Properties.Items["external-key"] = key;
         };
-        options.Events.OnTicketReceived = context =>
+        options.Events.OnTicketReceived = async context =>
         {
+            var properties = context.Properties!;
+            var handoffs = context.HttpContext.RequestServices.GetRequiredService<IFederationHandoffs>();
+            var id = await handoffs.IssueAsync(properties.Items["local-user"]!, properties.Items["external-key"]!,
+                context.HttpContext.RequestAborted);
+            properties.Items["handoff-id"] = id.ToString();
             context.Principal = new ClaimsPrincipal(new ClaimsIdentity([], Exchange));
-            return Task.CompletedTask;
         };
         options.Events.OnRemoteFailure = async context =>
         {

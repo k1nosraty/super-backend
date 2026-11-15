@@ -76,7 +76,7 @@ await transaction.CommitAsync(ct);
 
 An exception before commit rolls back both the receipt and the effect. If the process fails after commit and the queue retries the job, the receipt stops the effect from being applied again. Concurrent attempts use the same unique receipt key. Keep all database effects after the receipt check and in the supplied transaction. For external effects, propagate the job ID as an idempotency key to the external system and handle its delivery guarantees separately.
 
-Retain outbox messages, jobs, and inbox receipts for the applicable retry and deduplication windows. The module exposes persistent state and leaves retention policy to the deployment. Integration tests inject a PostgreSQL relay failure after queue insertion and handler failures on both sides of commit.
+Retain outbox messages, jobs, and inbox receipts for the applicable retry and deduplication windows. The maintenance command deletes eligible settled job, outbox, and inbox rows together. Configure its retention window to cover the deployment’s retry and deduplication requirements. Integration tests inject a PostgreSQL relay failure after queue insertion and handler failures on both sides of commit.
 
 ## Notes integration
 
@@ -93,3 +93,7 @@ The built-in handler updates `notes."NoteCreationStats"`. This projection counts
 Enable Notes, Jobs, and Outbox on every active Jobs worker that shares this queue. Workers can claim any job type. Keep at least one Outbox relay running. Turning publishing off allows the registered handler to finish the existing backlog.
 
 The end-to-end test calls the authenticated Notes API, injects an outbox write failure, and verifies the note rolls back. It also injects a queue acknowledgement failure after the real handler commits and checks that the worker reclaims the job without incrementing the counter twice.
+
+### Inspect and redrive
+
+Use `GET /api/v1/admin/outbox?status=conflict&id=...` with `outbox.inspect`. Filter by ID, status, or UTC `before`. Follow the message ID in the Jobs API. For a confirmed different-type collision, send `POST /api/v1/admin/outbox/{id}/redrive` with a reason. The operation uses a new message ID and records the link and audit atomically. A repeat, a same-type collision, a dispatch without a conflict, or an existing inbox receipt returns 409. Investigate those states before performing any further operation. Redrive requires a privileged MFA session in production.

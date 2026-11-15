@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using SuperBackend.Tenancy;
 using Xunit;
@@ -41,6 +42,17 @@ public sealed class TenancyTests(BackendDatabase database) : IClassFixture<Backe
             a.PostAsJsonAsync(Documents(tenantA.Id), new DocumentInput("Private A", "")), HttpStatusCode.Created);
         var docB = await ReadAsync<TenantDocument>(
             b.PostAsJsonAsync(Documents(tenantB.Id), new DocumentInput("Private B", "")), HttpStatusCode.Created);
+        await ExpectAsync(admin.PutAsJsonAsync(Membership(tenantA.Id, "unknown"), new { access = "Editor" }),
+            HttpStatusCode.NotFound);
+        await ExpectAsync(admin.PutAsJsonAsync(Membership(tenantA.Id, userA.Id), new { access = "NotAnAccessLevel" }),
+            HttpStatusCode.BadRequest);
+        await ExpectAsync(admin.PutAsJsonAsync(Tenants + $"/{tenantB.Id}/status", new { active = false, reason = "Offboarding review" }),
+            HttpStatusCode.NoContent);
+        await ExpectAsync(b.GetAsync(Documents(tenantB.Id)), HttpStatusCode.NotFound);
+        await ExpectAsync(admin.PutAsJsonAsync(Tenants + $"/{tenantB.Id}/status", new { active = true, reason = "Reopened" }),
+            HttpStatusCode.NoContent);
+        await ExpectAsync(b.GetAsync(Documents(tenantB.Id)), HttpStatusCode.OK);
+
         await ExpectAsync(a.GetAsync(Documents(tenantB.Id)), HttpStatusCode.NotFound);
         await ExpectAsync(admin.GetAsync(Documents(tenantA.Id)), HttpStatusCode.NotFound);
         await ExpectAsync(a.GetAsync(Documents(tenantA.Id) + "/" + docB.Id), HttpStatusCode.NotFound);
@@ -52,6 +64,32 @@ public sealed class TenancyTests(BackendDatabase database) : IClassFixture<Backe
         await ExpectAsync(b.PutAsJsonAsync(Documents(tenantA.Id) + "/" + docA.Id, new DocumentInput("Wrong", "")), HttpStatusCode.NotFound);
         await ExpectAsync(admin.DeleteAsync(Membership(tenantA.Id, userB.Id)), HttpStatusCode.NoContent);
         await ExpectAsync(b.GetAsync(Documents(tenantA.Id) + "/" + docA.Id), HttpStatusCode.NotFound);
+
+        using var version = await a.GetAsync(Documents(tenantA.Id) + "/" + docA.Id);
+        var etag = version.Headers.ETag!;
+        a.DefaultRequestHeaders.IfMatch.Add(etag);
+        await ExpectAsync(a.PutAsJsonAsync(Documents(tenantA.Id) + "/" + docA.Id,
+            new DocumentInput("Revised", "")), HttpStatusCode.NoContent);
+        await ExpectAsync(a.PutAsJsonAsync(Documents(tenantA.Id) + "/" + docA.Id,
+            new DocumentInput("Stale edit", "")), HttpStatusCode.PreconditionFailed);
+
+        await using (var scope = app.Services.CreateAsyncScope())
+        {
+            var background = scope.ServiceProvider.GetRequiredService<ITenantDatabaseSession>();
+            var visible = await background.ExecuteAsync(tenantA.Id, """tenancy."Documents" """,
+                async (connection, transaction, ct) =>
+                {
+                    await using var command = connection.CreateCommand();
+                    command.Transaction = transaction;
+                    command.CommandText = """SELECT count(*) FROM tenancy."Documents" WHERE "Id" = @document""";
+                    var parameter = command.CreateParameter();
+                    parameter.ParameterName = "document";
+                    parameter.Value = docB.Id;
+                    command.Parameters.Add(parameter);
+                    return Assert.IsType<long>(await command.ExecuteScalarAsync(ct));
+                }, CancellationToken.None);
+            Assert.Equal(0L, visible);
+        }
 
         await AssertDatabasePolicyAsync(runtime, tenantA.Id, tenantB.Id, docB.Id);
 
@@ -85,6 +123,14 @@ public sealed class TenancyTests(BackendDatabase database) : IClassFixture<Backe
             Assert.Equal(PostgresErrorCodes.InsufficientPrivilege,
                 (await Assert.ThrowsAsync<PostgresException>(async () => await insert.ExecuteNonQueryAsync())).SqlState);
             await tx.RollbackAsync();
+        }
+
+        await using (var tx = await connection.BeginTransactionAsync())
+        {
+            await using var set = new NpgsqlCommand("SELECT set_config('superbackend.tenant_id', @tenant, true)", connection, tx);
+            set.Parameters.AddWithValue("tenant", tenantA.ToString());
+            await set.ExecuteScalarAsync();
+            await tx.CommitAsync();
         }
 
         await using var unscoped = new NpgsqlCommand("""SELECT count(*) FROM tenancy."Documents" """, connection);

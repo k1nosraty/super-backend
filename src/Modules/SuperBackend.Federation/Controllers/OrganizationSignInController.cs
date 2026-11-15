@@ -27,7 +27,11 @@ public sealed class OrganizationSignInController : ControllerBase
     }
 
     [HttpPost("exchange")]
-    public async Task<IResult> Exchange([FromServices] IFederatedAccounts accounts)
+    [ProducesResponseType<Microsoft.AspNetCore.Authentication.BearerToken.AccessTokenResponse>(200)]
+    [ProducesResponseType(401)]
+    [ProducesResponseType(403)]
+    public async Task<IResult> Exchange([FromServices] IFederatedAccounts accounts,
+        [FromServices] IFederationHandoffs handoffs, [FromServices] ISessionIssuer sessions, CancellationToken ct)
     {
         var settings = HttpContext.RequestServices.GetRequiredService<FederationSettings>();
         if (Request.Headers.Origin.Count != 1 || Request.Headers.Origin[0] != settings.PublicOrigin)
@@ -36,12 +40,14 @@ public sealed class OrganizationSignInController : ControllerBase
         var ticket = await HttpContext.AuthenticateAsync(FederationModule.Exchange);
         if (!ticket.Succeeded || ticket.Properties is null ||
             !ticket.Properties.Items.TryGetValue("external-key", out var key) || key is null ||
-            !ticket.Properties.Items.TryGetValue("local-user", out var id) || id is null)
+            !ticket.Properties.Items.TryGetValue("local-user", out var id) || id is null ||
+            !ticket.Properties.Items.TryGetValue("handoff-id", out var raw) || !Guid.TryParse(raw, out var handoff) ||
+            !await handoffs.ConsumeAsync(handoff, id, key, ct))
             return Results.Unauthorized();
 
         await HttpContext.SignOutAsync(FederationModule.Exchange);
         var principal = await accounts.CreatePrincipalAsync(key, id);
         return principal is null ? Results.Unauthorized() :
-            Results.SignIn(principal, authenticationScheme: IdentityConstants.BearerScheme);
+            Results.SignIn(await sessions.StartAsync(principal, ct), authenticationScheme: IdentityConstants.BearerScheme);
     }
 }

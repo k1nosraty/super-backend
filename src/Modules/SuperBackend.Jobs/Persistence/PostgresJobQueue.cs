@@ -1,3 +1,4 @@
+using SuperBackend.Platform;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,21 +18,30 @@ internal sealed class PostgresJobQueue(JobsData data) : IDurableJobQueue, IJobOp
             """, ct) != 0;
     }
 
-    public async Task<Lease?> ClaimAsync(TimeSpan duration, CancellationToken ct)
-    {
-        await data.Database.ExecuteSqlRawAsync("""
-            UPDATE jobs."Jobs"
+    public Task<int> ExpireExhaustedLeasesAsync(CancellationToken ct) =>
+        data.Database.ExecuteSqlRawAsync("""
+            WITH exhausted AS (
+                SELECT "Id" FROM jobs."Jobs"
+                WHERE "Status" = 'running' AND "LeaseUntil" <= now() AND "Attempts" >= "MaxAttempts"
+                ORDER BY "LeaseUntil", "Id"
+                FOR UPDATE SKIP LOCKED
+                LIMIT 100
+            )
+            UPDATE jobs."Jobs" AS job
             SET "Status" = 'dead', "FinishedAt" = now(), "LeaseId" = NULL, "LeaseUntil" = NULL,
                 "LastError" = 'lease-expired'
-            WHERE "Status" = 'running' AND "LeaseUntil" <= now() AND "Attempts" >= "MaxAttempts"
+            FROM exhausted
+            WHERE job."Id" = exhausted."Id"
             """, ct);
 
+    public async Task<Lease?> ClaimAsync(TimeSpan duration, string[] supportedTypes, CancellationToken ct)
+    {
         var leaseId = Guid.NewGuid();
         var claimed = await data.Database.SqlQuery<Lease>($"""
             WITH candidate AS (
                 SELECT "Id"
                 FROM jobs."Jobs"
-                WHERE "Attempts" < "MaxAttempts"
+                WHERE "Type" = ANY({supportedTypes}) AND "Attempts" < "MaxAttempts"
                     AND (("Status" = 'pending' AND "AvailableAt" <= now())
                         OR ("Status" = 'running' AND "LeaseUntil" <= now()))
                 ORDER BY "AvailableAt", "Id"
@@ -69,16 +79,25 @@ internal sealed class PostgresJobQueue(JobsData data) : IDurableJobQueue, IJobOp
             """, ct);
     }
 
-    public Task<List<JobSummary>> ListAsync(int offset, CancellationToken ct) =>
-        data.Jobs.OrderByDescending(item => item.AvailableAt).ThenBy(item => item.Id)
+    public Task<List<JobSummary>> ListAsync(int offset, Guid? id, string? status, DateTimeOffset? before, CancellationToken ct) =>
+        data.Jobs.Where(item => (id == null || item.Id == id) && (status == null || item.Status == status) &&
+            (before == null || item.AvailableAt < before)).OrderByDescending(item => item.AvailableAt).ThenBy(item => item.Id)
             .Skip(Math.Max(0, offset)).Take(50)
             .Select(item => new JobSummary(item.Id, item.Type, item.Status, item.Attempts, item.MaxAttempts,
                 item.AvailableAt, item.FinishedAt, item.LastError)).ToListAsync(ct);
 
-    public async Task<bool> RetryAsync(Guid id, CancellationToken ct) =>
-        await data.Database.ExecuteSqlInterpolatedAsync($"""
+    public async Task<bool> RetryAsync(Guid id, string actor, string reason, CancellationToken ct)
+    {
+        await using var transaction = await data.Database.BeginTransactionAsync(ct);
+        var changed = await data.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE jobs."Jobs"
             SET "Status" = 'pending', "Attempts" = 0, "AvailableAt" = now(), "FinishedAt" = NULL, "LastError" = NULL
             WHERE "Id" = {id} AND "Status" = 'dead'
-            """, ct) != 0;
+            """, ct);
+        if (changed == 0)
+            return false;
+        await OperationsAudit.RecordAsync(data, actor, "job.redriven", id.ToString(), reason, ct);
+        await transaction.CommitAsync(ct);
+        return true;
+    }
 }

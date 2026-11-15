@@ -33,8 +33,12 @@ ef() {
         cd "$root"
         dotnet tool restore
         if [[ $module == Outbox ]]; then export Modules__Jobs=true; fi
+        local build_options=()
+        if [[ ${DB_CHECK_CONFIGURATION:-} == Release && $1 == has-pending-model-changes ]]; then
+            build_options=(--no-build --configuration Release)
+        fi
         env ASPNETCORE_ENVIRONMENT=Development "Modules__${module}=true" \
-            dotnet ef migrations "$@" --context "$context" --project "$target" --startup-project "$api"
+            dotnet ef migrations "$@" "${build_options[@]}" --context "$context" --project "$target" --startup-project "$api"
     )
 }
 

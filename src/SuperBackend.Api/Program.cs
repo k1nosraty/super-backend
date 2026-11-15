@@ -11,24 +11,20 @@ using SuperBackend.Outbox;
 using SuperBackend.Tenancy;
 using SuperBackend.Notes;
 
+var maintenance = args is ["--maintenance"];
+var verifyProfile = args is ["--check-profile"];
 var migrate = args is ["--migrate"];
+var recover = args is ["--recover-admin", _, _];
 var bootstrap = args is ["--bootstrap-admin", _];
-if (!migrate && !bootstrap && args.Any(arg => arg is "--migrate" or "--bootstrap-admin"))
-    throw new ArgumentException("Use --migrate or --bootstrap-admin EMAIL as the only command.");
+if (!migrate && !bootstrap && !recover && !maintenance && !verifyProfile && args.Any(arg => arg is "--migrate" or "--bootstrap-admin" or "--recover-admin" or "--maintenance" or "--check-profile"))
+    throw new ArgumentException("Use --check-profile, --migrate, --maintenance, --bootstrap-admin EMAIL, or --recover-admin EMAIL ACTION.");
 
-var builder = WebApplication.CreateBuilder(migrate || bootstrap ? [] : args);
+var builder = WebApplication.CreateBuilder(migrate || bootstrap || recover || maintenance || verifyProfile ? [] : args);
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 32 * 1024);
 var connection = builder.Configuration.GetConnectionString("Main")
     ?? throw new InvalidOperationException("ConnectionStrings:Main is required.");
-var notesEnabled = builder.Configuration.GetValue<bool>("Modules:Notes");
 var development = builder.Environment.IsDevelopment();
-var federationEnabled = builder.Configuration.GetValue<bool>("Modules:Federation");
-var tenancyEnabled = builder.Configuration.GetValue<bool>("Modules:Tenancy");
-var jobsEnabled = builder.Configuration.GetValue<bool>("Modules:Jobs");
-var outboxEnabled = builder.Configuration.GetValue<bool>("Modules:Outbox");
-var publishNoteJobs = builder.Configuration.GetValue<bool>("Notes:PublishCreatedJobs");
-if (publishNoteJobs && (!notesEnabled || !jobsEnabled || !outboxEnabled))
-    throw new InvalidOperationException("Notes:PublishCreatedJobs requires Modules:Notes, Modules:Jobs and Modules:Outbox.");
+var features = FeatureProfile.Read(builder.Configuration);
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddApiLocalization();
@@ -46,40 +42,47 @@ builder.Services.AddProblemDetails(options =>
             context.ProblemDetails.Title = text[$"Http{code}"];
         }
 
+        context.ProblemDetails.Extensions.TryAdd("code", $"http_{status ?? 500}");
         context.ProblemDetails.Extensions["traceId"] =
-            Activity.Current?.TraceId.ToString() ?? context.HttpContext.TraceIdentifier;
+                Activity.Current?.TraceId.ToString() ?? context.HttpContext.TraceIdentifier;
     });
 builder.Services.AddExceptionHandler<PersistenceErrors>();
 builder.AddApiSecurity();
 builder.AddIdentityModule(connection);
-if (notesEnabled)
+if (features.Notes)
     builder.Services.AddNotesModule(connection);
 
 var mvc = builder.Services.AddControllers().ConfigureApplicationPartManager(manager => manager.ApplicationParts.Clear());
-if (federationEnabled)
+if (features.Federation)
     builder.AddFederationModule(mvc);
-if (tenancyEnabled)
+if (features.Tenancy)
     mvc.AddTenancyModule(connection, builder.Configuration.GetConnectionString("TenantData") ?? connection);
-if (jobsEnabled)
+if (features.Jobs)
     mvc.AddJobsModule(connection, builder.Configuration);
-if (outboxEnabled)
+if (features.Outbox)
     builder.Services.AddOutboxModule(connection, builder.Configuration);
-if (notesEnabled && outboxEnabled)
-    builder.Services.AddNotesOutbox(publishNoteJobs);
+if (features.Notes && features.Outbox)
+    builder.Services.AddNotesOutbox(features.PublishNoteJobs);
 ProductModules.Register(builder, mvc);
 
 var app = builder.Build();
 
+if (verifyProfile)
+{
+    Console.WriteLine("The configured feature profile is valid.");
+    return;
+}
+
 if (migrate)
 {
     await app.Services.MigrateIdentityAsync();
-    if (notesEnabled)
+    if (features.Notes)
         await app.Services.MigrateNotesAsync();
-    if (tenancyEnabled)
+    if (features.Tenancy)
         await app.Services.MigrateTenancyAsync();
-    if (jobsEnabled)
+    if (features.Jobs)
         await app.Services.MigrateJobsAsync();
-    if (outboxEnabled)
+    if (features.Outbox)
         await app.Services.MigrateOutboxAsync();
     return;
 }
@@ -89,6 +92,20 @@ if (bootstrap)
     var password = builder.Configuration["Bootstrap:Password"]
         ?? throw new InvalidOperationException("Configure Bootstrap__Password before provisioning an administrator.");
     await app.Services.BootstrapAdministratorAsync(args[1], password);
+    return;
+}
+
+if (recover)
+{
+    await app.Services.RecoverAdministratorAsync(args[1], builder.Configuration["Recovery:Operator"] ?? "",
+        builder.Configuration["Recovery:Reason"] ?? "", args[2], builder.Configuration["Recovery:Password"]);
+    return;
+}
+
+if (maintenance)
+{
+    await RetentionMaintenance.RunAsync(connection, features, builder.Configuration.GetValue("Retention:FinishedDays", 30),
+        builder.Configuration.GetValue("Retention:BatchSize", 1000));
     return;
 }
 
@@ -116,6 +133,17 @@ app.Use(async (context, next) =>
 });
 
 app.UseRouting();
+app.Use(async (context, next) =>
+{
+    // Routing's framework-generated rejection has no authorization metadata.
+    if (context.GetEndpoint() is { DisplayName: "415 HTTP Unsupported Media Type" })
+    {
+        context.Response.StatusCode = StatusCodes.Status415UnsupportedMediaType;
+        return;
+    }
+
+    await next(context);
+});
 app.UseCors();
 app.UseRateLimiter();
 app.UseAuthentication();
@@ -134,7 +162,9 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 app.MapAdminPanel();
 app.MapIdentityModule();
 app.MapControllers();
-if (notesEnabled)
+if (features.Outbox)
+    app.MapOutboxOperations();
+if (features.Notes)
     app.MapNotesModule();
 
 await app.RunAsync();

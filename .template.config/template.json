@@ -11,13 +11,13 @@
     "sources": [
         {
             "include": [
-                "src/**/*", "tests/**/*", "scripts/**/*", "templates/**/*", "docs/**/*", ".github/**/*",
+                "src/**/*", "tests/**/*", "scripts/**/*", "templates/**/*", "deploy/**/*", "docs/**/*", ".github/**/*",
                 ".dockerignore", ".editorconfig", ".gitignore", ".env.example",
                 "Directory.Build.props", "Directory.Packages.props", "Dockerfile", "LICENSE",
                 "README.md", "SuperBackend.slnx", "compose.yaml", "dotnet-tools.json", "global.json"
             ],
             "exclude": [
-                "**/bin/**", "**/obj/**", "**/TestResults/**", "scripts/new-project.sh",
+                "**/bin/**", "**/obj/**", "**/TestResults/**", "scripts/new-project.sh", "scripts/check-generated.sh", ".github/workflows/release-evidence.yml", "**/__pycache__/**",
                 "**/.env", "**/*.user", "**/*.pfx", "**/*.pem", "**/*.dump"
             ],
             "copyOnly": ["LICENSE", "**/*.woff2", "**/OFL.txt"]

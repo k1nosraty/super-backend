@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using SuperBackend.Platform;
 
 namespace SuperBackend.Outbox;
 
@@ -14,15 +15,12 @@ public static class OutboxModule
         services.AddDbContext<OutboxData>(options => options.UseNpgsql(connection,
             postgres => postgres.MigrationsHistoryTable("__EFMigrationsHistory", OutboxData.Schema)));
         services.AddScoped<PostgresOutboxRelay>();
+        services.AddAuthorizationBuilder().AddPermission(OutboxOperations.Inspect, "Inspect outbox status")
+            .AddPermission(OutboxOperations.Redrive, "Resolve an outbox conflict", requiresMfa: true);
         services.AddSingleton<TransactionalMessages>();
         services.AddSingleton<ITransactionalOutbox>(provider => provider.GetRequiredService<TransactionalMessages>());
         services.AddSingleton<IJobInbox>(provider => provider.GetRequiredService<TransactionalMessages>());
-        services.AddHealthChecks().AddDbContextCheck<OutboxData>("outbox-store", tags: ["ready"],
-            customTestQuery: (data, ct) => data.Database.SqlQueryRaw<bool>("""
-                SELECT to_regclass('outbox."Messages"') IS NOT NULL
-                   AND to_regclass('outbox."InboxReceipts"') IS NOT NULL
-                   AND to_regclass('jobs."Jobs"') IS NOT NULL AS "Value"
-                """).SingleAsync(ct));
+        services.AddHealthChecks().AddMigrationReadiness<OutboxData>("outbox-store");
 
         var poll = configuration.GetValue("Outbox:PollMilliseconds", 1000);
         var batch = configuration.GetValue("Outbox:BatchSize", 100);

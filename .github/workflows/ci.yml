@@ -7,8 +7,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: '10.0.404'
       - run: docker compose up -d --wait database mail
@@ -16,16 +16,11 @@ jobs:
       - run: dotnet build --configuration Release --no-restore
       - run: dotnet test --configuration Release --no-build
       - run: dotnet format whitespace --no-restore --verify-no-changes
-      - run: ./scripts/db.sh check Identity
-      - run: ./scripts/db.sh check Notes
-      - run: ./scripts/db.sh check Tenancy
-      - run: ./scripts/db.sh check Jobs
-      - run: ./scripts/db.sh check Outbox
-      - if: ${{ hashFiles('.template.config/template.json') != '' }}
+      - name: Check every migration snapshot using the Release build
+        env:
+          DB_CHECK_CONFIGURATION: Release
         run: |
-          ./scripts/new-project.sh Example.Inventory "$RUNNER_TEMP/Example.Inventory"
-          cd "$RUNNER_TEMP/Example.Inventory"
-          ./scripts/new-service.sh InventoryReports
-          dotnet restore --locked-mode
-          dotnet build --configuration Release --no-restore
+          for module in Identity Notes Tenancy Jobs Outbox; do ./scripts/db.sh check "$module"; done
+      - if: ${{ hashFiles('.template.config/template.json') != '' }}
+        run: ./scripts/check-generated.sh
       - run: docker compose build migrate

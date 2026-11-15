@@ -2,7 +2,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace SuperBackend.Tenancy;
 
-internal sealed record Tenant(Guid Id, string Name);
+internal sealed record Tenant(Guid Id, string Name)
+{
+    public bool IsActive { get; init; } = true;
+}
 internal sealed record Membership(Guid TenantId, string UserId, TenantAccess Access);
 
 internal sealed class Document
@@ -11,6 +14,7 @@ internal sealed class Document
     public Guid Id { get; init; }
     public required string Title { get; set; }
     public required string Body { get; set; }
+    public Guid Version { get; set; }
 }
 
 internal sealed class TenancyData(DbContextOptions<TenancyData> options) : DbContext(options)
@@ -23,6 +27,7 @@ internal sealed class TenancyData(DbContextOptions<TenancyData> options) : DbCon
     protected override void OnModelCreating(ModelBuilder model)
     {
         model.HasDefaultSchema(Schema);
+        model.Entity<Tenant>().Property(item => item.IsActive).HasDefaultValue(true);
         model.Entity<Tenant>().Property(item => item.Name).HasMaxLength(100);
         model.Entity<Membership>(entity =>
         {
@@ -36,6 +41,7 @@ internal sealed class TenancyData(DbContextOptions<TenancyData> options) : DbCon
             entity.HasKey(item => new { item.TenantId, item.Id });
             entity.HasOne<Tenant>().WithMany().HasForeignKey(item => item.TenantId);
             entity.Property(item => item.Title).HasMaxLength(120);
+            entity.Property(item => item.Version).HasDefaultValueSql("gen_random_uuid()");
             entity.Property(item => item.Body).HasMaxLength(4000);
         });
     }

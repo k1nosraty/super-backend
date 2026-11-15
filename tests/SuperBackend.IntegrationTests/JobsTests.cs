@@ -38,6 +38,7 @@ public sealed class JobsTests(BackendDatabase database) : IClassFixture<BackendD
             ["Jobs:AttemptTimeoutSeconds"] = "2",
             ["Jobs:RetrySeconds"] = "1"
         };
+        var unsupported = Guid.NewGuid();
         var success = Guid.NewGuid();
         var flaky = Guid.NewGuid();
         var dead = Guid.NewGuid();
@@ -52,6 +53,7 @@ public sealed class JobsTests(BackendDatabase database) : IClassFixture<BackendD
             await using var scope = producer.Services.CreateAsyncScope();
             var queue = scope.ServiceProvider.GetRequiredService<IDurableJobQueue>();
             Assert.True(await queue.EnqueueAsync(success, "pass", payload));
+            Assert.True(await queue.EnqueueAsync(unsupported, "future-release", payload));
             Assert.False(await queue.EnqueueAsync(success, "fail", payload));
             Assert.True(await queue.EnqueueAsync(flaky, "flaky", payload));
             Assert.True(await queue.EnqueueAsync(dead, "fail", payload, 1));
@@ -72,6 +74,7 @@ public sealed class JobsTests(BackendDatabase database) : IClassFixture<BackendD
 
         var settled = await WaitForAsync(writer, rows => rows.Count(row => row.Status is "succeeded" or "dead") == 6);
         AssertJob(settled, success, "succeeded", 1);
+        AssertJob(settled, unsupported, "pending", 0);
         AssertJob(settled, flaky, "succeeded", 2);
         AssertJob(settled, dead, "dead", 1, "handler-failed");
         AssertJob(settled, abandoned, "succeeded", 2);

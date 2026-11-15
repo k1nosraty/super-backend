@@ -39,6 +39,24 @@ public sealed class FederationTests(BackendDatabase database) : IClassFixture<Ba
         await ExpectAsync(admin.PutAsJsonAsync(links, new { userId = administrator.Id, link.subject }), HttpStatusCode.Forbidden);
         await ExpectAsync(admin.PutAsJsonAsync(links, link), HttpStatusCode.NoContent);
 
+        using var invalidState = await CompleteLoginAsync(browser, corruptState: true);
+        Assert.Equal(HttpStatusCode.Unauthorized, invalidState.StatusCode);
+        provider.TokenIssuer = "https://unrelated.example.test";
+        using var invalidIssuer = await CompleteLoginAsync(browser);
+        Assert.Equal(HttpStatusCode.Unauthorized, invalidIssuer.StatusCode);
+        provider.TokenIssuer = null;
+
+        provider.TokenAudience = "other-application";
+        using var invalidAudience = await CompleteLoginAsync(browser);
+        Assert.Equal(HttpStatusCode.Unauthorized, invalidAudience.StatusCode);
+        provider.TokenAudience = null;
+
+        var statusRoute = $"/api/v1/admin/users/{local.Id}/status";
+        await ExpectAsync(admin.PutAsJsonAsync(statusRoute, new { disabled = true }), HttpStatusCode.NoContent);
+        using var disabled = await CompleteLoginAsync(browser);
+        Assert.Equal(HttpStatusCode.Unauthorized, disabled.StatusCode);
+        await ExpectAsync(admin.PutAsJsonAsync(statusRoute, new { disabled = false }), HttpStatusCode.NoContent);
+
         provider.CurrentAcr = "password-only";
         using var weak = await CompleteLoginAsync(browser);
         Assert.Equal(HttpStatusCode.Unauthorized, weak.StatusCode);
@@ -50,24 +68,33 @@ public sealed class FederationTests(BackendDatabase database) : IClassFixture<Ba
         var cookie = Cookies(callback);
         Assert.Contains("SuperBackend.OidcExchange=", cookie, StringComparison.Ordinal);
         await ExpectAsync(browser.SendAsync(Exchange(cookie, "https://untrusted.example.test")), HttpStatusCode.Forbidden);
-        var tokens = await ReadAsync<Bearer>(browser.SendAsync(Exchange(cookie, "http://localhost:5080")), HttpStatusCode.OK);
+        var exchanged = await Task.WhenAll(
+            browser.SendAsync(Exchange(cookie, "http://localhost:5080")),
+            browser.SendAsync(Exchange(cookie, "http://localhost:5080")));
+        using var accepted = Assert.Single(exchanged, response => response.StatusCode == HttpStatusCode.OK);
+        using var rejected = Assert.Single(exchanged, response => response.StatusCode == HttpStatusCode.Unauthorized);
+        var tokens = (await accepted.Content.ReadFromJsonAsync<Bearer>())!;
         browser.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
         var signedIn = await ReadAsync<UserView>(browser.GetAsync("/api/v1/me"), HttpStatusCode.OK);
         Assert.Equal(local.Id, signedIn.Id);
+        await ExpectAsync(browser.SendAsync(Exchange(cookie, "http://localhost:5080")), HttpStatusCode.Unauthorized);
         await ExpectAsync(browser.GetAsync("/api/v1/admin/users"), HttpStatusCode.Forbidden);
         await ExpectAsync(admin.PostAsJsonAsync(links + "/remove", link), HttpStatusCode.NoContent);
         await ExpectAsync(browser.GetAsync("/api/v1/me"), HttpStatusCode.Unauthorized);
         await ExpectAsync(browser.SendAsync(Exchange(cookie, "http://localhost:5080")), HttpStatusCode.Unauthorized);
     }
 
-    private static async Task<HttpResponseMessage> CompleteLoginAsync(HttpClient browser)
+    private static async Task<HttpResponseMessage> CompleteLoginAsync(HttpClient browser, bool corruptState = false)
     {
         using var challenge = await browser.GetAsync("/api/v1/oidc/login");
         Assert.Equal(HttpStatusCode.Redirect, challenge.StatusCode);
         using var provider = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
         using var authorization = await provider.GetAsync(challenge.Headers.Location);
         Assert.Equal(HttpStatusCode.Redirect, authorization.StatusCode);
-        using var callback = new HttpRequestMessage(HttpMethod.Get, authorization.Headers.Location!.PathAndQuery);
+        var path = authorization.Headers.Location!.PathAndQuery;
+        if (corruptState)
+            path = path[..path.IndexOf('?')] + "?code=fixture&state=invalid";
+        using var callback = new HttpRequestMessage(HttpMethod.Get, path);
         callback.Headers.TryAddWithoutValidation("Cookie", Cookies(challenge));
         return await browser.SendAsync(callback);
     }
