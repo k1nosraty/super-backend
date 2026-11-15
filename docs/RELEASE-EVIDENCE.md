@@ -2,6 +2,8 @@
 
 The [release tasks](RELEASE-TASKS.md) preserve the 22 original findings and their acceptance criteria. The checks below were run against local PostgreSQL, Mailpit, and the two-replica reference deployment on November 15, 2026. The workflow produces its own clean-runner results for the commit being released.
 
+The [acceptance execution record](PRODUCTION-ACCEPTANCE.md) contains the later hosted GitHub Actions results and the supplementary lab checks for a deployed OIDC provider, authenticated SMTP, monitoring, backup scale, and erasure.
+
 | Task | Local implementation and verification | Further release evidence |
 | --- | --- | --- |
 | R01 | Expected migration IDs across enabled contexts. PostgreSQL tests cover empty, partial, current, compatible newer, and unavailable databases. The deployment drill confirms readiness fails and liveness survives an outage. | Run the profile against each environment's database before routing traffic. |
