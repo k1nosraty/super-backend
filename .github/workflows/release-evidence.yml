@@ -12,7 +12,7 @@ permissions:
   contents: read
 jobs:
   rehearse:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       API_IMAGE: superbackend-release:candidate
@@ -38,13 +38,19 @@ jobs:
       - run: dotnet restore --locked-mode
       - run: dotnet test -c Release --no-restore --logger 'trx;LogFileName=release.trx' --results-directory "$RUNNER_TEMP/evidence"
       - run: ./scripts/check-generated.sh
-      - name: Run TLS, browser, migration and recovery rehearsals
+      - name: Prepare the browser fixture
         run: |
           browser="$RUNNER_TEMP/browser"
           mkdir -p "$browser"
           npm install --prefix "$browser" --save-exact playwright@1.56.1
-          "$browser/node_modules/.bin/playwright" install --with-deps chromium
-          export PLAYWRIGHT_DIRECTORY="$browser"
+          command -v google-chrome
+          google-chrome --version
+      - name: Run TLS, browser, migration and recovery rehearsals
+        run: |
+          export PLAYWRIGHT_DIRECTORY="$RUNNER_TEMP/browser"
+          CHROMIUM_EXECUTABLE="$(command -v google-chrome)"
+          export CHROMIUM_EXECUTABLE
+          exec > >(tee "$RUNNER_TEMP/evidence/rehearsals.log") 2>&1
           baseline="$PREVIOUS_IMAGE"
           REHEARSAL_EVIDENCE_FILE="$RUNNER_TEMP/evidence/fresh.json" PREVIOUS_IMAGE= ./scripts/rehearse-release.sh
           REHEARSAL_NOTE_SAMPLES=120 REHEARSAL_NOTE_RATE=10 REHEARSAL_POOL_DRILL=true \
