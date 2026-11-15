@@ -1,0 +1,47 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using SuperBackend.Platform;
+
+namespace SuperBackend.Identity;
+
+internal sealed class AccessPolicies(IdentityData data, ILookupNormalizer normalizer,
+    IHttpContextAccessor accessor) : AuthorizationHandler<Permission>
+{
+    public const string Administrator = "Administrator";
+    public const string AdministrationPolicy = "identity.administration";
+
+    protected override async Task HandleRequirementAsync(AuthorizationHandlerContext context,
+        Permission requirement)
+    {
+        if (context.User.Identity?.IsAuthenticated != true)
+            return;
+
+        var userId = context.User.UserId();
+        var cancellation = accessor.HttpContext?.RequestAborted ?? default;
+        var administrator = normalizer.NormalizeName(Administrator);
+        var allowDelegation = requirement.Name != AdministrationPolicy;
+        var allowed = await data.Roles
+            .Where(role => data.UserRoles.Any(membership => membership.RoleId == role.Id && membership.UserId == userId))
+            .AnyAsync(role => role.NormalizedName == administrator ||
+                (allowDelegation && data.RolePermissions.Any(grant =>
+                    grant.RoleId == role.Id && grant.Name == requirement.Name)), cancellation);
+        if (allowed)
+            context.Succeed(requirement);
+    }
+}
+
+internal sealed class ValidateSession(RequestDelegate next)
+{
+    public async Task InvokeAsync(HttpContext context, SignInManager<Account> signIn)
+    {
+        if (context.User.Identity?.IsAuthenticated == true &&
+            await signIn.ValidateSecurityStampAsync(context.User) is null)
+        {
+            context.User = new(new System.Security.Claims.ClaimsIdentity());
+        }
+
+        await next(context);
+    }
+}

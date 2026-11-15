@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <UserSecretsId>super-backend-local</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../SuperBackend.Platform/SuperBackend.Platform.csproj" />
+    <ProjectReference Include="../Modules/SuperBackend.Identity/SuperBackend.Identity.csproj" />
+    <ProjectReference Include="../Modules/SuperBackend.Notes/SuperBackend.Notes.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

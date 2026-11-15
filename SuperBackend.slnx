@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SuperBackend.Api/SuperBackend.Api.csproj" />
+    <Project Path="src/SuperBackend.Platform/SuperBackend.Platform.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/">
+    <Project Path="src/Modules/SuperBackend.Identity/SuperBackend.Identity.csproj" />
+    <Project Path="src/Modules/SuperBackend.Notes/SuperBackend.Notes.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SuperBackend.IntegrationTests/SuperBackend.IntegrationTests.csproj" />
+  </Folder>
+</Solution>
