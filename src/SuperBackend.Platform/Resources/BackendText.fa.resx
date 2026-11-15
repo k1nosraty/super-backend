@@ -1,0 +1,66 @@
+<?xml version='1.0' encoding='utf-8'?>
+<root>
+    <resheader name="resmimetype">
+        <value>text/microsoft-resx</value>
+    </resheader>
+    <resheader name="version">
+        <value>2.0</value>
+    </resheader>
+    <resheader name="reader">
+        <value>System.Resources.ResXResourceReader, System.Windows.Forms</value>
+    </resheader>
+    <resheader name="writer">
+        <value>System.Resources.ResXResourceWriter, System.Windows.Forms</value>
+    </resheader>
+    <data name="Http400" xml:space="preserve">
+        <value>درخواست نامعتبر است</value>
+    </data>
+    <data name="Http401" xml:space="preserve">
+        <value>برای ادامه وارد شوید</value>
+    </data>
+    <data name="Http403" xml:space="preserve">
+        <value>اجازهٔ انجام این عملیات را ندارید</value>
+    </data>
+    <data name="Http404" xml:space="preserve">
+        <value>مورد درخواستی پیدا نشد</value>
+    </data>
+    <data name="Http409" xml:space="preserve">
+        <value>تداخل در داده‌ها</value>
+    </data>
+    <data name="Http429" xml:space="preserve">
+        <value>تعداد درخواست‌ها بیش از حد مجاز است</value>
+    </data>
+    <data name="Http500" xml:space="preserve">
+        <value>در پردازش درخواست خطایی رخ داد</value>
+    </data>
+    <data name="AdministratorProtected" xml:space="preserve">
+        <value>حساب‌های مدیر محافظت می‌شوند</value>
+    </data>
+    <data name="CurrentPasswordRequired" xml:space="preserve">
+        <value>گذرواژهٔ فعلی لازم است</value>
+    </data>
+    <data name="RequiredField" xml:space="preserve">
+        <value>یکی از فیلدهای اجباری خالی است</value>
+    </data>
+    <data name="DataChanged" xml:space="preserve">
+        <value>داده‌ها تغییر کرده‌اند. دوباره تلاش کنید</value>
+    </data>
+    <data name="ConfirmEmailSubject" xml:space="preserve">
+        <value>تأیید نشانی ایمیل</value>
+    </data>
+    <data name="ResetPasswordSubject" xml:space="preserve">
+        <value>بازیابی گذرواژه</value>
+    </data>
+    <data name="PasswordResetCodeSubject" xml:space="preserve">
+        <value>کد بازیابی گذرواژه</value>
+    </data>
+    <data name="AccountAlreadyExists" xml:space="preserve">
+        <value>حسابی با این ایمیل وجود دارد</value>
+    </data>
+    <data name="InvalidInvitation" xml:space="preserve">
+        <value>کد دعوت نامعتبر است یا اعتبار آن تمام شده است</value>
+    </data>
+    <data name="InviteSubject" xml:space="preserve">
+        <value>دعوت به ساخت حساب</value>
+    </data>
+</root>

@@ -1,0 +1,42 @@
+export const locales = {
+    en: {
+        language: "Language", administration: "Administration", intro: "Manage user accounts, role permissions, and changes to access.",
+        email: "Email", password: "Password", mfa: "Two-factor authentication", code: "Authenticator code", recovery: "Recovery code",
+        login: "Sign in", logout: "Sign out", users: "Users", roles: "Roles", audit: "Audit log", close: "Close",
+        search: "Search by email", find: "Search", create: "Create role", name: "Name", status: "Status", verified: "Email verified",
+        manage: "Manage", enabled: "Active", disabled: "Suspended", yes: "Yes", no: "No", none: "No records found.",
+        loading: "Loading…", loaded: "Results loaded.", previous: "Previous", next: "Next", occurred: "Time", action: "Action",
+        actor: "Actor ID", target: "Target", revoke: "Revoke sessions", enable: "Reactivate", disable: "Suspend",
+        memberships: "Role memberships", permissions: "Permissions", reserved: "The Administrator role is managed by the operator.",
+        wrongLogin: "Sign-in failed. Check your credentials and two-factor code.", noAccess: "Administrator access is required.",
+        expired: "The session has ended. Sign in again.", requestFailed: "The request could not be completed.",
+        confirmDisable: "Suspend this account and revoke its sessions?", confirmRevoke: "Revoke all sessions for this account?",
+        accountSaved: "Account updated.", sessionsRevoked: "Sessions revoked.",
+        invite: "Invite user", send: "Send invitation", invited: "Invitation sent.", save: "Save name", delete: "Delete role",
+        confirmDelete: "Delete this role and remove its memberships and permissions?",
+        "role.renamed": "Role renamed", "role.deleted": "Role deleted", "user.invited": "User invited",
+        "user.disabled": "Account suspended", "user.enabled": "Account reactivated", "user.sessions.revoked": "Sessions revoked",
+        "role.created": "Role created", "permission.granted": "Permission granted", "permission.revoked": "Permission revoked",
+        "role.assigned": "Role assigned", "role.removed": "Role removed", "administrator.provisioned": "Administrator provisioned"
+    },
+    fa: {
+        language: "زبان", administration: "مدیریت", intro: "حساب‌های کاربری، مجوزهای نقش‌ها و تغییرات دسترسی را مدیریت کنید.",
+        email: "ایمیل", password: "گذرواژه", mfa: "احراز هویت دومرحله‌ای", code: "کد برنامهٔ احراز هویت", recovery: "کد بازیابی",
+        login: "ورود", logout: "خروج", users: "کاربران", roles: "نقش‌ها", audit: "گزارش ممیزی", close: "بستن",
+        search: "جست‌وجو بر اساس ایمیل", find: "جست‌وجو", create: "ساخت نقش", name: "نام", status: "وضعیت", verified: "تأیید ایمیل",
+        manage: "مدیریت", enabled: "فعال", disabled: "تعلیق‌شده", yes: "بله", no: "خیر", none: "نتیجه‌ای پیدا نشد.",
+        loading: "در حال بارگذاری…", loaded: "نتایج بارگذاری شد.", previous: "قبلی", next: "بعدی", occurred: "زمان", action: "عملیات",
+        actor: "شناسهٔ عامل", target: "هدف", revoke: "لغو نشست‌ها", enable: "فعال‌سازی", disable: "تعلیق",
+        memberships: "نقش‌های کاربر", permissions: "مجوزها", reserved: "نقش مدیر در اختیار اپراتور سامانه است.",
+        wrongLogin: "ورود ناموفق بود. اطلاعات ورود و کد دومرحله‌ای را بررسی کنید.", noAccess: "دسترسی مدیر لازم است.",
+        expired: "نشست پایان یافته است. دوباره وارد شوید.", requestFailed: "انجام درخواست ممکن نبود.",
+        confirmDisable: "این حساب تعلیق و همهٔ نشست‌های آن لغو شود؟", confirmRevoke: "همهٔ نشست‌های این حساب لغو شود؟",
+        accountSaved: "حساب به‌روز شد.", sessionsRevoked: "نشست‌ها لغو شدند.",
+        invite: "دعوت کاربر", send: "ارسال دعوت‌نامه", invited: "دعوت‌نامه ارسال شد.", save: "ذخیرهٔ نام", delete: "حذف نقش",
+        confirmDelete: "این نقش همراه با عضویت‌ها و مجوزهایش حذف شود؟",
+        "role.renamed": "نام نقش تغییر کرد", "role.deleted": "نقش حذف شد", "user.invited": "کاربر دعوت شد",
+        "user.disabled": "حساب تعلیق شد", "user.enabled": "حساب فعال شد", "user.sessions.revoked": "نشست‌ها لغو شدند",
+        "role.created": "نقش ساخته شد", "permission.granted": "مجوز داده شد", "permission.revoked": "مجوز گرفته شد",
+        "role.assigned": "نقش اختصاص یافت", "role.removed": "نقش برداشته شد", "administrator.provisioned": "حساب مدیر ساخته شد"
+    }
+};

@@ -1,30 +1,30 @@
-# سوپر بک‌اند
+# SuperBackend
 
-سوپر بک‌اند یک پروژهٔ پایه برای ساخت Web API با C# و.NET ۱۰ LTS است. برنامه به‌صورت یک واحد اجرا و مستقر می‌شود. هر ماژول مسیرهای API، کد و مدل دادهٔ خودش را دارد. برای شروع یک محصول جدید، زیرساخت هویت و دسترسی را بردارید و APIهای دامنهٔ خودتان را کنار آن اضافه کنید.
+SuperBackend is a reusable C# and .NET 10 backend starter. It runs as a modular monolith with PostgreSQL. Each feature module owns its endpoints, persistence model, and migrations. A new product can start with account management, access control, and operations tooling, then add its own feature modules under `src/Modules`.
 
-## اجرای محلی
-
-با Docker و Docker Compose اجرا کنید.
+## Run locally
 
 ```bash
 docker compose up --build -d
 curl --fail --retry 8 --retry-delay 1 --retry-all-errors http://localhost:5080/health/ready
 ```
 
-سرویس `migrate` پیش از بالا آمدن API، migrationهای ماژول‌های فعال را روی PostgreSQL اجرا می‌کند. بعد از آماده‌شدن برنامه می‌توانید [سند OpenAPI](http://localhost:5080/openapi/v1.json) و [صندوق ایمیل محلی](http://localhost:8025) را باز کنید.
+Open the [administration panel](http://localhost:5080/admin), [OpenAPI document](http://localhost:5080/openapi/v1.json), or [local mail inbox](http://localhost:8025). Compose applies the enabled modules' migrations before it starts the API. The ports bind to loopback. Copy `.env.example` to `.env` to customize the local ports.
 
-برای اجرای API از طریق SDK و ویرایش کد، فقط پایگاه داده و صندوق ایمیل را با Compose بالا بیاورید. اگر کانتینر API روی پورت `5080` در حال اجراست، ابتدا آن را با `docker compose stop api` متوقف کنید.
+For SDK development, use Docker only for PostgreSQL and Mailpit. Stop the Compose API first if it already occupies port 5080.
 
 ```bash
 docker compose up -d --wait database mail
 dotnet restore --locked-mode
-ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/SuperBackend.Api --no-launch-profile -- --migrate
+./scripts/db.sh apply
 dotnet run --project src/SuperBackend.Api
 ```
 
-### اولین مدیر
+The local scripts use Bash. On Windows, run them from WSL.
 
-پس از اعمال migrationها، از ترمینال مورد اعتماد مدیر بسازید. گذرواژه باید دست‌کم ۱۲ نویسه داشته باشد. فرمان ایجاد مدیر، ایمیل حساب تازه را تأیید می‌کند و اگر از قبل حسابی با آن ایمیل وجود داشته باشد، متوقف می‌شود.
+### Create the first administrator
+
+Run this after migrations have completed. The administrator's email is marked confirmed by this trusted operator command. Choose a password with at least 12 characters.
 
 ```bash
 read -rsp "Administrator password: " Bootstrap__Password
@@ -34,118 +34,53 @@ docker compose run --rm --no-deps -e Bootstrap__Password migrate --bootstrap-adm
 unset Bootstrap__Password
 ```
 
-در حالت اجرای API از طریق SDK، خط `docker compose run` را با این فرمان جایگزین کنید.
+For SDK development, replace the Docker command with:
 
 ```bash
 ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/SuperBackend.Api --no-launch-profile -- --bootstrap-admin admin@example.test
 ```
 
-برای ورود، ایمیل و گذرواژه را به `POST /api/v1/auth/login` بفرستید. پاسخ شامل `accessToken` و `refreshToken` است. در درخواست‌های محافظت‌شده، هدر `Authorization: Bearer <accessToken>` را بفرستید.
+Sign in at `/admin`. The Users view supports prefix search, email invitations, role membership, suspension, and session revocation. The Roles view manages roles and permissions. The Audit log records access and account administration changes. The language selector switches between English and right-to-left Persian. The panel holds its tokens in memory for the current tab. Reloading the page ends the browser session.
 
-## قابلیت‌های آماده
+## Generate a named solution
 
-- ماژول هویت با ASP.NET Core Identity. ثبت‌نام اختیاری، تأیید ایمیل، بازیابی و تغییر گذرواژه، احراز هویت دومرحله‌ای با TOTP و کد بازیابی، محدودیت تلاش ورود و لغو همهٔ نشست‌ها.
-- پروفایل کاربر در `GET /api/v1/me` و `PUT /api/v1/me`. بدنهٔ ویرایش یک فیلد `displayName` دارد.
-- کنترل دسترسی مبتنی بر نقش و مجوز. مدیر از API نقش می‌سازد، مجوز به نقش می‌دهد و نقش به کاربر اختصاص می‌دهد. نتیجهٔ تغییر دسترسی در درخواست بعدی با همان توکن اعمال می‌شود.
-- ثبت تغییرات دسترسی. ثبت ممیزی و تغییر نقش یا مجوز در یک تراکنش ذخیره می‌شوند. مسیر `GET /api/v1/admin/audit` خروجی را با پارامترهای `before` و `limit` صفحه‌بندی می‌کند.
-- زیرساخت HTTP با احراز هویت پیش‌فرض، محدودیت نرخ درخواست، CORS مبتنی بر فهرست مجاز، اعتبارسنجی ورودی، پاسخ‌های Problem Details، OpenAPI در محیط توسعه و مسیرهای بررسی سلامت.
-- ماژول اختیاری یادداشت با CRUD، کنترل مالکیت رکورد، صفحه‌بندی و کنترل هم‌زمانی ویرایش. برای دسترسی به یادداشت کاربر دیگر، API پاسخ `404` می‌دهد.
-
-### مسیرهای حساب کاربری
-
-پیشوند مسیرها `/api/v1/auth` است.
-
-| مسیر | کاربرد |
-| --- | --- |
-| مسیر `POST /register` | ارسال `email` و `password` و دریافت لینک تأیید از SMTP |
-| مسیر `GET /confirmEmail` | بازکردن لینک تأیید دریافتی |
-| مسیر `POST /resendConfirmationEmail` | ارسال دوبارهٔ لینک با `email` |
-| مسیر `POST /login` | دریافت توکن‌ها با `email`، `password` و در صورت نیاز `twoFactorCode` یا `twoFactorRecoveryCode` |
-| مسیر `POST /refresh` | دریافت توکن‌ها با `refreshToken` |
-| مسیر `POST /forgotPassword` | درخواست کد بازیابی با `email` |
-| مسیر `POST /resetPassword` | ارسال `email`، `resetCode` و `newPassword` |
-| مسیر `GET /manage/info` | مشاهدهٔ اطلاعات حساب |
-| مسیر `POST /manage/info` | تغییر ایمیل یا گذرواژه با هدر `X-Current-Password` |
-| مسیر `POST /manage/2fa` | مدیریت TOTP و کدهای بازیابی با هدر `X-Current-Password` |
-| مسیر `POST /logout-all` | لغو توکن‌های دسترسی و تمدید حساب در همهٔ دستگاه‌ها |
-
-توکن دسترسی ۱۰ دقیقه و توکن تمدید ۷ روز اعتبار دارد. Identity از توکن Bearer اختصاصی ASP.NET Core استفاده می‌کند. تمدید توکن، نسخهٔ قبلی توکن تمدید را تا زمان انقضا یا لغو نشست‌ها معتبر نگه می‌دارد. برای مدیریت دومرحله‌ای، ابتدا یک درخواست با بدنهٔ `{}` بفرستید، `sharedKey` را در برنامهٔ احراز هویت ثبت کنید. ایجاد اولیهٔ کلید، نشست قبلی را لغو می‌کند. دوباره وارد شوید و سپس `enable: true` و `twoFactorCode` را بفرستید. [مستندات ASP.NET Core Identity](https://learn.microsoft.com/en-us/aspnet/core/security/authentication/identity-api-authorization?view=aspnetcore-10.0)
-
-### دادن دسترسی به ماژول یادداشت
-
-با توکن مدیر، مراحل زیر را اجرا کنید. پیشوند همهٔ مسیرها `/api/v1/admin` است.
-
-۱. با `POST /roles` و بدنهٔ `{"name":"Note editor"}` نقش بسازید. پاسخ شناسهٔ نقش را برمی‌گرداند.
-۲. از `GET /permissions` مجوزهای ماژول‌های فعال را بگیرید.
-۳. با `PUT /roles/{roleId}/permissions/notes.read` و `PUT /roles/{roleId}/permissions/notes.write` مجوزها را اختصاص دهید.
-۴. شناسهٔ کاربر را از `GET /users` بگیرید. با `PUT /users/{userId}/roles/{roleId}` نقش را به او بدهید.
-
-حالا کاربر می‌تواند در `POST /api/v1/notes` با بدنهٔ `{"title":"First note","body":"Text"}` یادداشت بسازد. برای ویرایش، مقدار `version` دریافتی را در بدنهٔ `PUT /api/v1/notes/{id}` بفرستید. اگر نسخه عوض شده باشد، API پاسخ `409` می‌دهد. برای برداشتن نقش یا مجوز از همان مسیر و متد `DELETE` استفاده کنید. نقش `Administrator` از طریق فرمان عملیاتی قابل تخصیص است.
-
-## ساخت API برای محصول خودتان
-
-فایل `src/SuperBackend.Api/Program.cs` نقطهٔ اتصال ماژول‌هاست. پروژهٔ `SuperBackend.Platform` قرارداد ثبت مجوز و دسترسی به شناسهٔ کاربر را در اختیار ماژول‌ها می‌گذارد. پروژه‌های هویت و یادداشت به یکدیگر وابستگی ندارند و هرکدام DbContext، schema و تاریخچهٔ migration خود را دارند.
-
-۱. یک پروژه در `src/Modules` بسازید. الگوی ثبت سرویس و endpoint را از `NotesModule.cs` بردارید و پروژه را از API مرجع دهید.
-۲. اگر ماژول اختیاری است، ثبت سرویس، ثبت endpoint و اجرای migration را با یک گزینه در `Modules` کنترل کنید.
-۳. برای هر عملیات، مجوز را با نامی مانند `orders.read` ثبت کنید و روی endpoint از `RequireAuthorization("orders.read")` استفاده کنید. اگر عملیات به یک رکورد خاص مربوط است، مالکیت یا عضویت کاربر را داخل همان ماژول بررسی کنید.
-۴. مدل دادهٔ ماژول را در schema متعلق به خودش نگه دارید. اطلاعات مورد نیاز از ماژول دیگر را از قرارداد همان ماژول بگیرید.
-۵. با `Modules__Notes=false` ماژول نمونه را خاموش کنید. API، catalog مجوزها و مرحلهٔ migration از همان گزینه استفاده می‌کنند.
-۶. پس از تغییر وابستگی‌ها یا افزودن پروژه، `dotnet restore` را اجرا و فایل‌های `packages.lock.json` را همراه کد ثبت کنید.
-
-برای اعتبارسنجی ورودی، روی DTO از Data Annotations و در ثبت endpoint از `ValidateBody<T>()` استفاده کنید.
-
-این نمونه فرم پایهٔ یک endpoint محافظت‌شده را نشان می‌دهد.
-
-```csharp
-services.AddAuthorizationBuilder()
-    .AddPermission("orders.read", "Read orders");
-
-app.MapGet("/api/v1/orders", (ClaimsPrincipal user, OrderQueries orders, CancellationToken ct) =>
-    orders.ListForUserAsync(user.UserId(), ct))
-    .RequireAuthorization("orders.read");
-```
-
-برای ساخت migration، ابزار محلی EF را بازیابی و پروژهٔ مقصد را مشخص کنید. این نمونه برای تغییر مدل یادداشت است.
+Run this from a checkout of the starter:
 
 ```bash
-dotnet tool restore
-ASPNETCORE_ENVIRONMENT=Development dotnet ef migrations add UpdateNotes \
-  --context NotesData --project src/Modules/SuperBackend.Notes \
-  --startup-project src/SuperBackend.Api --output-dir Migrations
+./scripts/new-project.sh Acme.Inventory ../Acme.Inventory
+cd ../Acme.Inventory
+dotnet restore --locked-mode
+docker compose up --build -d
 ```
 
-## تنظیمات استقرار
+The .NET template renames solution and project files, namespaces, references, the Data Protection application name, and the user secrets identifier. It copies CI, migrations, tests, operations scripts, and English documentation. It excludes build output, local secrets, and dumps. The source checkout also supports `dotnet new install .` followed by `dotnet new super-backend --name Acme.Inventory`.
 
-| متغیر محیطی | کاربرد |
-| --- | --- |
-| متغیر `ConnectionStrings__Main` | اتصال PostgreSQL از طریق secret محیط استقرار |
-| متغیر `AllowedHosts` | نام دامنه‌های مجاز برای API با جداکنندهٔ `;` |
-| متغیر `Identity__PublicOrigin` | نشانی HTTPS عمومی API، مانند `https://api.example.com` برای لینک‌های ایمیل |
-| متغیر `Identity__AllowRegistration` | فعال‌سازی ثبت‌نام عمومی. مقدار پیش‌فرض خارج از توسعه `false` است |
-| متغیر `Modules__Notes` | فعال‌سازی ماژول نمونه. مقدار پیش‌فرض خارج از توسعه `false` است |
-| متغیر `Smtp__Host`، `Smtp__Port` و `Smtp__From` | سرور SMTP با STARTTLS. پورت پیش‌فرض `587` است |
-| متغیر `Smtp__Username` و `Smtp__Password` | اطلاعات ورود به SMTP در صورت نیاز |
-| متغیر `DataProtection__KeyDirectory` | مسیر پایدار و با دسترسی محدود برای کلیدهای Data Protection. replicaهای یک محیط به کلیدهای یکسان نیاز دارند |
-| متغیر `Http__KnownProxies__0` | IP پراکسی مورد اعتماد برای خواندن `X-Forwarded-For` و `X-Forwarded-Proto`. برای IPهای دیگر شماره را افزایش دهید |
-| متغیر `Http__CorsOrigins__0` | مبدأ دقیق فرانت‌اند، مانند `https://app.example.com`. تنظیم خالی یعنی دسترسی مرورگری از مبدأ دیگر غیرفعال است |
+For concurrent Compose stacks, give each stack a unique `COMPOSE_PROJECT_NAME` and use a separate set of host ports.
 
-فایل Compose برای توسعهٔ محلی است. در استقرار، TLS را روی میزبان API یا پراکسی خاتمه دهید. درخواست‌های HTTP در محیط تولید با `400` رد می‌شوند. health check را هم از مسیر HTTPS اجرا کنید. مسیر `/health/live` سلامت فرایند را بررسی می‌کند و مسیر `/health/ready` اتصال پایگاه دادهٔ هر ماژول فعال را می‌سنجد.
+## Account and access APIs
 
-برای اتصال PostgreSQL روی شبکه، از TLS با `SSL Mode=VerifyFull` و زنجیرهٔ اعتماد مناسب استفاده کنید. [تنظیمات رمزنگاری Npgsql](https://www.npgsql.org/doc/security.html)
+- Public account endpoints under `/api/v1/auth` cover `register`, `confirmEmail`, `resendConfirmationEmail`, `login`, `refresh`, `forgotPassword`, `resetPassword`, and `accept-invitation`. The public registration switch leaves invitation acceptance available.
+- An administrator sends an invitation with `POST /api/v1/admin/invitations` and `{"email":"user@example.test"}`. The recipient sends `email`, `code`, and `password` to `POST /api/v1/auth/accept-invitation`. The code expires after two hours and is single-use. If SMTP delivery fails, submitting the same pending invitation resends it.
+- Login takes `email` and `password`, plus `twoFactorCode` or `twoFactorRecoveryCode` if needed. Pass the returned access token as `Authorization: Bearer <accessToken>`; send `refreshToken` to renew it. Access and refresh tokens expire after 10 minutes and seven days, respectively. A previously issued refresh token stays valid until it expires or sessions are revoked.
+- Use `GET /api/v1/me` and `PUT /api/v1/me` to read or update the profile. The update body contains `displayName`. Use `POST /api/v1/auth/logout-all` to revoke all sessions.
+- Use `GET /api/v1/auth/manage/info` for account details and `POST /api/v1/auth/manage/info` for email or password changes. Account changes and `POST /api/v1/auth/manage/2fa` require the `X-Current-Password` header. For TOTP, fetch the shared key with an empty body, sign in again if a new key was generated, then send `enable: true` and a current `twoFactorCode`. Store the returned recovery codes securely.
+- Under `/api/v1/admin`, manage roles using `/roles` and `/roles/{roleId}`. Grant or revoke a named permission with PUT or DELETE on `/roles/{roleId}/permissions/{permission}`. Assign or remove the role from a user with PUT or DELETE on `/users/{userId}/roles/{roleId}`. Use `GET /permissions` to list permissions declared by enabled modules.
+- Suspend or reactivate a regular account with `PUT /api/v1/admin/users/{id}/status` and `{"disabled":true}` or `{"disabled":false}`. Use `POST /api/v1/admin/users/{id}/revoke-sessions` to leave the account active and revoke its tokens. The built-in administrator role and administrative accounts are protected from these operations.
 
-پیش از اجرای نسخهٔ جدید برنامه، همان ایمیج را یک بار با گزینهٔ `--migrate` اجرا کنید. برای مرحلهٔ migration از حساب دارای دسترسی DDL و در اجرای عادی API از حساب با دسترسی لازم به داده‌ها استفاده کنید. کلیدهای Data Protection در فایل نگهداری می‌شوند. دسترسی فایل و رمزنگاری در سطح ذخیره‌ساز به محیط استقرار وابسته است. از دست‌رفتن کلیدها، توکن‌ها و لینک‌های تأیید صادرشده را نامعتبر می‌کند.
+Send `Accept-Language: fa` for localized API error titles and outgoing email subjects. The response declares its language with `Content-Language`. Framework Identity error codes, audit action identifiers, and the JSON contract are stable across languages.
 
-در تنظیمات لاگ پراکسی، مقدار هدرهای `Authorization` و `X-Current-Password` و پارامترهای مسیر تأیید ایمیل را ثبت نکنید.
+## Extend and operate
 
-محدودیت نرخ در حافظهٔ هر نمونهٔ API اعمال می‌شود. در استقرار چندنمونه‌ای، محدودیت مشترک را در ورودی شبکه اعمال کنید. این نسخه برای هویت داخلی یک محصول طراحی شده و برای SSO یا فدراسیون هویت به ارائه‌دهندهٔ OIDC نیاز دارد.
+- [Architecture, folder layout, and adding a module](docs/ARCHITECTURE.md)
+- [Lifecycle coverage, deployment configuration, databases, and recovery](docs/OPERATIONS.md)
+- [ASP.NET Core Identity bearer tokens](https://learn.microsoft.com/en-us/aspnet/core/security/authentication/identity-api-authorization?view=aspnetcore-10.0)
 
-## اجرای آزمون‌ها
+Run the integration suite against local PostgreSQL and Mailpit:
 
 ```bash
 docker compose up -d --wait database mail
 dotnet restore --locked-mode
-dotnet test -c Release --no-restore
+dotnet test --configuration Release --no-restore
 ```
 
-آزمون‌های یکپارچه برای هر اجرای مجموعه، یک پایگاه دادهٔ موقت می‌سازند. ایمیل تأیید و کد بازیابی را از Mailpit می‌خوانند و احراز هویت، لغو نشست، تغییر مجوز، مرز مالکیت و محدودیت نرخ را از مسیر HTTP بررسی می‌کنند.
+The suite creates a temporary database and exercises the HTTP API and SMTP flows. Tests accept `SUPERBACKEND_TEST_DATABASE`, `SUPERBACKEND_TEST_SMTP_HOST`, `SUPERBACKEND_TEST_SMTP_PORT`, and `SUPERBACKEND_TEST_MAILPIT` for alternate fixtures.

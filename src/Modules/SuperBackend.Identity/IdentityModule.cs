@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Localization;
 using SuperBackend.Platform;
 
 namespace SuperBackend.Identity;
@@ -37,6 +38,7 @@ public static class IdentityModule
                 options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
             })
             .AddRoles<IdentityRole>()
+            .AddSignInManager<AccountSignInManager>()
             .AddClaimsPrincipalFactory<UserClaimsPrincipalFactory<Account>>()
             .AddEntityFrameworkStores<IdentityData>();
 
@@ -72,7 +74,8 @@ public static class IdentityModule
             throw new InvalidOperationException("Identity:PublicOrigin must be an explicit origin.");
         }
         services.AddSingleton(new IdentityPublicOrigin(publicOrigin));
-        services.AddSingleton<IEmailSender<Account>, SmtpEmailSender>();
+        services.AddSingleton<SmtpEmailSender>();
+        services.AddSingleton<IEmailSender<Account>>(provider => provider.GetRequiredService<SmtpEmailSender>());
         services.AddHealthChecks().AddDbContextCheck<IdentityData>("identity-db", tags: ["ready"]);
     }
 
@@ -126,7 +129,7 @@ public static class IdentityModule
                     if (password.Count != 1 || string.IsNullOrEmpty(password[0]) || user is null ||
                         !await users.CheckPasswordAsync(user, password[0]!))
                     {
-                        await Results.Problem(statusCode: 403, title: "Current password required")
+                        await Results.Problem(statusCode: 403, title: context.RequestServices.GetRequiredService<IStringLocalizer<BackendText>>()["CurrentPasswordRequired"])
                             .ExecuteAsync(context);
                         return;
                     }
@@ -141,7 +144,7 @@ public static class IdentityModule
         }).RequireAuthorization();
 
         ProfileEndpoints.Map(api);
-        AdminEndpoints.Map(api);
+        AccountInvitations.Map(AdminEndpoints.Map(api), auth);
     }
 
     private static ValueTask<object?> ValidateIdentityBody(EndpointFilterInvocationContext context,
@@ -160,7 +163,7 @@ public static class IdentityModule
         });
 
         return hasMissingField
-            ? ValueTask.FromResult<object?>(Results.Problem(statusCode: 400, title: "A required field is empty."))
+            ? ValueTask.FromResult<object?>(Results.Problem(statusCode: 400, title: context.HttpContext.RequestServices.GetRequiredService<IStringLocalizer<BackendText>>()["RequiredField"]))
             : next(context);
     }
 

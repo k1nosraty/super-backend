@@ -7,3 +7,4 @@ TestResults/
 *.user
 *.pfx
 *.pem
+*.dump

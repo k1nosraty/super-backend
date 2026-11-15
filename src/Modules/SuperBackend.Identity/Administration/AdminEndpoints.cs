@@ -12,7 +12,7 @@ namespace SuperBackend.Identity;
 
 internal static class AdminEndpoints
 {
-    public static void Map(RouteGroupBuilder api)
+    public static RouteGroupBuilder Map(RouteGroupBuilder api)
     {
         var admin = api.MapGroup("/admin").WithTags("Access administration")
             .RequireAuthorization(AccessPolicies.AdministrationPolicy);
@@ -21,14 +21,14 @@ internal static class AdminEndpoints
         admin.MapGet("/roles", (IdentityData db, int? offset, int? limit, CancellationToken ct) =>
             db.Roles.OrderBy(role => role.Name).ThenBy(role => role.Id)
                 .Skip(Offset(offset)).Take(Limit(limit)).Select(role => new { role.Id, role.Name }).ToListAsync(ct));
-        admin.MapGet("/users", (IdentityData db, int? offset, int? limit, CancellationToken ct) =>
-            db.Users.OrderBy(user => user.Id).Skip(Offset(offset)).Take(Limit(limit))
-                .Select(user => new { user.Id, user.Email, user.EmailConfirmed }).ToListAsync(ct));
+        AdminUserEndpoints.Map(admin);
         admin.MapGet("/audit", (IdentityData db, long? before, int? limit, CancellationToken ct) =>
             db.AccessAudits.Where(entry => before == null || entry.Id < before)
                 .OrderByDescending(entry => entry.Id).Take(Limit(limit)).AsNoTracking().ToListAsync(ct));
 
         admin.MapPost("/roles", CreateRoleAsync).ValidateBody<CreateRole>();
+        admin.MapPut("/roles/{roleId}", RenameRoleAsync).ValidateBody<CreateRole>();
+        admin.MapDelete("/roles/{roleId}", DeleteRoleAsync);
 
         admin.MapGet("/roles/{roleId}/permissions", async (string roleId, IdentityData db, CancellationToken ct) =>
         {
@@ -53,6 +53,7 @@ internal static class AdminEndpoints
         admin.MapDelete("/roles/{roleId}/permissions/{permission}", RevokePermissionAsync);
         admin.MapPut("/users/{userId}/roles/{roleId}", AddUserRoleAsync);
         admin.MapDelete("/users/{userId}/roles/{roleId}", RemoveUserRoleAsync);
+        return admin;
     }
 
     private static async Task<Results<Created<RoleView>, ProblemHttpResult, ValidationProblem, Conflict>>
@@ -80,6 +81,52 @@ internal static class AdminEndpoints
         await AuditAsync(db, time, actor, "role.created", role.Id, ct);
         await transaction.CommitAsync(ct);
         return TypedResults.Created((string?)null, new RoleView(role.Id, name));
+    }
+
+    private static async Task<IResult> RenameRoleAsync(string roleId, CreateRole input, ClaimsPrincipal actor,
+        IdentityData db, RoleManager<IdentityRole> roles, TimeProvider time, CancellationToken ct)
+    {
+        var role = await roles.FindByIdAsync(roleId);
+        if (role is null)
+            return Results.NotFound();
+
+        var name = input.Name.Trim();
+        if (IsReservedRole(role, roles) || roles.NormalizeKey(name) == roles.NormalizeKey(AccessPolicies.Administrator))
+            return Results.Problem(statusCode: 403, title: "This role is reserved.");
+        if (role.Name == name)
+            return Results.NoContent();
+
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var result = await roles.SetRoleNameAsync(role, name);
+        if (result.Succeeded)
+            result = await roles.UpdateAsync(role);
+        if (!result.Succeeded)
+            return result.Errors.Any(error => error.Code == nameof(IdentityErrorDescriber.DuplicateRoleName))
+                ? Results.Conflict()
+                : IdentityResponse.Empty(result);
+
+        await AuditAsync(db, time, actor, "role.renamed", role.Id, ct);
+        await transaction.CommitAsync(ct);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> DeleteRoleAsync(string roleId, ClaimsPrincipal actor, IdentityData db,
+        RoleManager<IdentityRole> roles, TimeProvider time, CancellationToken ct)
+    {
+        var role = await roles.FindByIdAsync(roleId);
+        if (role is null)
+            return Results.NotFound();
+        if (IsReservedRole(role, roles))
+            return Results.Problem(statusCode: 403, title: "This role is reserved.");
+
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var result = await roles.DeleteAsync(role);
+        if (!result.Succeeded)
+            return IdentityResponse.Empty(result);
+
+        await AuditAsync(db, time, actor, "role.deleted", role.Id, ct);
+        await transaction.CommitAsync(ct);
+        return Results.NoContent();
     }
 
     private static Task<IResult> GrantPermissionAsync(string roleId, string permission, ClaimsPrincipal actor,
@@ -121,34 +168,36 @@ internal static class AdminEndpoints
     }
 
     private static Task<IResult> AddUserRoleAsync(string userId, string roleId, ClaimsPrincipal actor,
-        IdentityData db, RoleManager<IdentityRole> roles, UserManager<Account> users, TimeProvider time, CancellationToken ct) =>
-        SetUserRoleAsync(userId, roleId, true, actor, db, roles, users, time, ct);
+        IdentityData db, RoleManager<IdentityRole> roles, TimeProvider time, CancellationToken ct) =>
+        SetUserRoleAsync(userId, roleId, true, actor, db, roles, time, ct);
 
     private static Task<IResult> RemoveUserRoleAsync(string userId, string roleId, ClaimsPrincipal actor,
-        IdentityData db, RoleManager<IdentityRole> roles, UserManager<Account> users, TimeProvider time, CancellationToken ct) =>
-        SetUserRoleAsync(userId, roleId, false, actor, db, roles, users, time, ct);
+        IdentityData db, RoleManager<IdentityRole> roles, TimeProvider time, CancellationToken ct) =>
+        SetUserRoleAsync(userId, roleId, false, actor, db, roles, time, ct);
 
     private static async Task<IResult> SetUserRoleAsync(string userId, string roleId, bool assign,
-        ClaimsPrincipal actor, IdentityData db, RoleManager<IdentityRole> roles, UserManager<Account> users,
+        ClaimsPrincipal actor, IdentityData db, RoleManager<IdentityRole> roles,
         TimeProvider time, CancellationToken ct)
     {
         var role = await roles.FindByIdAsync(roleId);
-        var user = await users.FindByIdAsync(userId);
-        if (role is null || user is null)
+        if (role is null || !await db.Users.AnyAsync(user => user.Id == userId, ct))
             return Results.NotFound();
         if (IsReservedRole(role, roles))
             return Results.Problem(statusCode: 403, title: "This role is reserved.");
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var name = role.Name!;
-        if (await users.IsInRoleAsync(user, name) == assign)
-            return Results.NoContent();
+        var changes = assign
+            ? await db.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                INSERT INTO identity."AspNetUserRoles" ("UserId", "RoleId")
+                VALUES ({userId}, {roleId})
+                ON CONFLICT DO NOTHING
+                """, ct)
+            : await db.UserRoles.Where(membership => membership.UserId == userId && membership.RoleId == roleId)
+                .ExecuteDeleteAsync(ct);
+        if (changes != 0)
+            await AuditAsync(db, time, actor, assign ? "role.assigned" : "role.removed", roleId, ct, userId);
 
-        var result = assign ? await users.AddToRoleAsync(user, name) : await users.RemoveFromRoleAsync(user, name);
-        if (!result.Succeeded)
-            return IdentityResponse.Empty(result);
-
-        await AuditAsync(db, time, actor, assign ? "role.assigned" : "role.removed", roleId, ct, userId);
         await transaction.CommitAsync(ct);
         return Results.NoContent();
     }
@@ -156,8 +205,8 @@ internal static class AdminEndpoints
     private static bool IsReservedRole(IdentityRole role, RoleManager<IdentityRole> roles) =>
         role.NormalizedName == roles.NormalizeKey(AccessPolicies.Administrator);
 
-    private static async Task AuditAsync(IdentityData db, TimeProvider time, ClaimsPrincipal actor,
-        string action, string roleId, CancellationToken ct, string? userId = null, string? permission = null)
+    internal static async Task AuditAsync(IdentityData db, TimeProvider time, ClaimsPrincipal actor,
+        string action, string? roleId, CancellationToken ct, string? userId = null, string? permission = null)
     {
         db.AccessAudits.Add(new AccessAudit
         {
@@ -171,8 +220,8 @@ internal static class AdminEndpoints
         await db.SaveChangesAsync(ct);
     }
 
-    private static int Offset(int? value) => Math.Max(value ?? 0, 0);
-    private static int Limit(int? value) => Math.Clamp(value ?? 25, 1, 100);
+    internal static int Offset(int? value) => Math.Max(value ?? 0, 0);
+    internal static int Limit(int? value) => Math.Clamp(value ?? 25, 1, 100);
 
     private sealed record RoleView(string Id, string Name);
 }

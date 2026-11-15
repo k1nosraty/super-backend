@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: superbackend
       POSTGRES_PASSWORD: local-dev-only
     ports:
-      - "127.0.0.1:54329:5432"
+      - "127.0.0.1:${SUPERBACKEND_DB_PORT:-54329}:5432"
     volumes:
       - database:/var/lib/postgresql
     healthcheck:
@@ -17,15 +17,16 @@ services:
   mail:
     image: ghcr.io/axllent/mailpit:v1.33.1
     ports:
-      - "127.0.0.1:10250:1025"
-      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:${SUPERBACKEND_SMTP_PORT:-10250}:1025"
+      - "127.0.0.1:${SUPERBACKEND_MAIL_PORT:-8025}:8025"
   migrate:
-    image: super-backend:local
+    image: ${COMPOSE_PROJECT_NAME}-api:local
     build: .
     command: ["--migrate"]
     environment: &api-environment
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__Main: "Host=database;Port=5432;Database=superbackend;Username=superbackend;Password=local-dev-only;GSS Encryption Mode=Disable"
+      Identity__PublicOrigin: "http://localhost:${SUPERBACKEND_HTTP_PORT:-5080}"
       Smtp__Host: mail
       Smtp__Port: "1025"
       DataProtection__KeyDirectory: /keys
@@ -33,7 +34,7 @@ services:
       database:
         condition: service_healthy
   api:
-    image: super-backend:local
+    image: ${COMPOSE_PROJECT_NAME}-api:local
     pull_policy: never
     environment: *api-environment
     depends_on:
@@ -42,7 +43,7 @@ services:
       mail:
         condition: service_started
     ports:
-      - "127.0.0.1:5080:8080"
+      - "127.0.0.1:${SUPERBACKEND_HTTP_PORT:-5080}:8080"
     volumes:
       - keys:/keys
 volumes:

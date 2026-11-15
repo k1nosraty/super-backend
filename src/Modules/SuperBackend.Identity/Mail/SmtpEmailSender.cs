@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Mail;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Localization;
+using SuperBackend.Platform;
 
 namespace SuperBackend.Identity;
 
@@ -22,16 +24,20 @@ internal sealed class SmtpOptions
 
 internal sealed record IdentityPublicOrigin(Uri Value);
 
-internal sealed class SmtpEmailSender(IOptions<SmtpOptions> options, IdentityPublicOrigin origin) : IEmailSender<Account>
+internal sealed class SmtpEmailSender(IOptions<SmtpOptions> options, IdentityPublicOrigin origin,
+    IStringLocalizer<BackendText> text) : IEmailSender<Account>
 {
     public Task SendConfirmationLinkAsync(Account user, string email, string confirmationLink) =>
-        SendAsync(email, "Confirm your email", WithPublicOrigin(confirmationLink));
+        SendAsync(email, text["ConfirmEmailSubject"], WithPublicOrigin(confirmationLink));
 
     public Task SendPasswordResetLinkAsync(Account user, string email, string resetLink) =>
-        SendAsync(email, "Reset your password", WithPublicOrigin(resetLink));
+        SendAsync(email, text["ResetPasswordSubject"], WithPublicOrigin(resetLink));
 
     public Task SendPasswordResetCodeAsync(Account user, string email, string resetCode) =>
-        SendAsync(email, "Password reset code", WebUtility.HtmlDecode(resetCode));
+        SendAsync(email, text["PasswordResetCodeSubject"], WebUtility.HtmlDecode(resetCode));
+
+    public Task SendInvitationAsync(string email, string code) =>
+        SendAsync(email, text["InviteSubject"], code);
 
     private string WithPublicOrigin(string link)
     {

@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
-    <UserSecretsId>super-backend-local</UserSecretsId>
+    <UserSecretsId>SuperBackend-local-92f02e70</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../SuperBackend.Platform/SuperBackend.Platform.csproj" />
@@ -8,5 +8,8 @@
     <ProjectReference Include="../Modules/SuperBackend.Notes/SuperBackend.Notes.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
   </ItemGroup>
 </Project>

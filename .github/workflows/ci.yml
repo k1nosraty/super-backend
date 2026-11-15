@@ -15,4 +15,13 @@ jobs:
       - run: dotnet restore --locked-mode
       - run: dotnet build --configuration Release --no-restore
       - run: dotnet test --configuration Release --no-build
+      - run: dotnet format whitespace --no-restore --verify-no-changes
+      - run: ./scripts/db.sh check Identity
+      - run: ./scripts/db.sh check Notes
+      - if: ${{ hashFiles('.template.config/template.json') != '' }}
+        run: |
+          ./scripts/new-project.sh Example.Inventory "$RUNNER_TEMP/Example.Inventory"
+          cd "$RUNNER_TEMP/Example.Inventory"
+          dotnet restore --locked-mode
+          dotnet build --configuration Release --no-restore
       - run: docker compose build migrate

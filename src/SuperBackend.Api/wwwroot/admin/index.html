@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SuperBackend Administration</title>
+    <link rel="stylesheet" href="./panel.css">
+    <script type="module" src="./panel.js"></script>
+</head>
+<body>
+    <header class="masthead">
+        <a class="brand" href="./index.html"><span class="mark" aria-hidden="true"></span>SuperBackend</a>
+        <div class="masthead-actions">
+            <label class="sr-only" for="language" data-text="language">Language</label>
+            <select id="language"><option value="en">English</option><option value="fa">فارسی</option></select>
+            <button id="logout" class="secondary" type="button" hidden data-text="logout">Sign out</button>
+        </div>
+    </header>
+
+    <main id="login-screen" class="login">
+        <section class="intro">
+            <h1 data-text="administration">Administration</h1>
+            <p data-text="intro">Manage user accounts, role permissions, and changes to access.</p>
+        </section>
+        <section class="sign-in" aria-labelledby="login-title">
+            <h2 id="login-title" data-text="login">Sign in</h2>
+            <form id="login-form" method="post">
+                <label><span data-text="email">Email</span><input name="email" type="email" autocomplete="username" required dir="ltr"></label>
+                <label><span data-text="password">Password</span><input name="password" type="password" autocomplete="current-password" required dir="ltr"></label>
+                <details id="mfa">
+                    <summary data-text="mfa">Two-factor authentication</summary>
+                    <label><span data-text="code">Authenticator code</span><input name="twoFactorCode" inputmode="numeric" autocomplete="one-time-code" dir="ltr"></label>
+                    <label><span data-text="recovery">Recovery code</span><input name="twoFactorRecoveryCode" autocomplete="off" dir="ltr"></label>
+                </details>
+                <p id="login-error" class="notice" role="alert" hidden></p>
+                <button type="submit" data-text="login">Sign in</button>
+            </form>
+        </section>
+    </main>
+
+    <main id="workspace" class="workspace" hidden>
+        <nav aria-label="Administration" data-label="administration">
+            <button type="button" data-view="users" data-text="users">Users</button>
+            <button type="button" data-view="roles" data-text="roles">Roles</button>
+            <button type="button" data-view="audit" data-text="audit">Audit log</button>
+        </nav>
+        <section class="content">
+            <h1 id="view-title" tabindex="-1"></h1>
+            <p id="workspace-error" class="notice" role="alert" hidden></p>
+            <div id="toolbar"></div>
+            <p id="result-status" class="sr-only" role="status"></p>
+            <div id="display"></div>
+            <div id="paging" class="paging"></div>
+        </section>
+    </main>
+
+    <dialog id="detail" aria-labelledby="detail-title">
+        <header><h2 id="detail-title"></h2><form method="dialog"><button class="secondary" data-text="close">Close</button></form></header>
+        <p id="detail-error" class="notice" role="alert" hidden></p>
+        <div id="detail-body"></div>
+    </dialog>
+</body>
+</html>

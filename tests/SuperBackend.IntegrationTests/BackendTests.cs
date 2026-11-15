@@ -208,6 +208,74 @@ public sealed class BackendTests(BackendDatabase database) : IClassFixture<Backe
         }
     }
 
+    [Fact]
+    public async Task AdministratorsCanInviteAndSuspendAccountsWithPublicRegistrationClosed()
+    {
+        await using var app = database.CreateApp(new Dictionary<string, string?>
+        {
+            ["Identity:AllowRegistration"] = "false"
+        });
+        using var admin = CreateClient(app);
+        using var member = CreateClient(app);
+
+        await ExpectAsync(member.GetAsync("/admin"), HttpStatusCode.Redirect);
+        using var shell = await member.GetAsync("/admin/index.html");
+        Assert.Equal(HttpStatusCode.OK, shell.StatusCode);
+        Assert.Contains("frame-ancestors 'none'", shell.Headers.GetValues("Content-Security-Policy").Single());
+        Assert.Contains("login-form", await shell.Content.ReadAsStringAsync());
+
+        member.DefaultRequestHeaders.AcceptLanguage.ParseAdd("fa-IR");
+        using var unauthorized = await member.GetAsync(Me);
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
+        Assert.Contains("fa", unauthorized.Content.Headers.ContentLanguage);
+        Assert.Equal("برای ادامه وارد شوید", (await unauthorized.Content.ReadFromJsonAsync<ProblemTitle>())!.Title);
+
+        await AuthenticateAsync(admin, AdminEmail);
+        var email = NewEmail();
+        await ExpectAsync(member.PostAsJsonAsync(Auth + "/register", new { email, password = Password }), HttpStatusCode.NotFound);
+        await ExpectAsync(member.PostAsJsonAsync(Admin + "/invitations", new { email }), HttpStatusCode.Unauthorized);
+
+        admin.DefaultRequestHeaders.AcceptLanguage.ParseAdd("fa");
+        await ExpectAsync(admin.PostAsJsonAsync(Admin + "/invitations", new { email }), HttpStatusCode.NoContent);
+        var code = await ReadMailAsync(email, "دعوت به ساخت حساب");
+        var invite = new { email, code, password = Password };
+        await ExpectAsync(member.PostAsJsonAsync(Auth + "/accept-invitation", invite), HttpStatusCode.NoContent);
+        await ExpectAsync(member.PostAsJsonAsync(Auth + "/accept-invitation", invite), HttpStatusCode.BadRequest);
+        await ExpectAsync(admin.PostAsJsonAsync(Admin + "/invitations", new { email }), HttpStatusCode.Conflict);
+        var account = Assert.Single(await ReadAsync<ManagedAccount[]>(
+            admin.GetAsync(Admin + "/users?search=" + Uri.EscapeDataString(email.ToUpperInvariant())), HttpStatusCode.OK));
+        Assert.True(account.EmailConfirmed);
+
+        var tokens = await LoginAsync(member, email);
+        member.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
+        await ExpectAsync(admin.PostAsync($"{Admin}/users/{account.Id}/revoke-sessions", null), HttpStatusCode.NoContent);
+        await ExpectAsync(member.GetAsync(Me), HttpStatusCode.Unauthorized);
+        await ExpectAsync(member.PostAsJsonAsync(Auth + "/refresh", new { tokens.RefreshToken }), HttpStatusCode.Unauthorized);
+        await AuthenticateAsync(member, email);
+
+        var status = $"{Admin}/users/{account.Id}/status";
+        await ExpectAsync(admin.PutAsJsonAsync(status, new { }), HttpStatusCode.BadRequest);
+        await ExpectAsync(admin.PutAsJsonAsync(status, new { disabled = true }), HttpStatusCode.NoContent);
+        await ExpectAsync(member.GetAsync(Me), HttpStatusCode.Unauthorized);
+        await ExpectAsync(member.PostAsJsonAsync(Auth + "/login", new { email, password = Password }), HttpStatusCode.Unauthorized);
+        await ExpectAsync(admin.PutAsJsonAsync(status, new { disabled = false }), HttpStatusCode.NoContent);
+        await AuthenticateAsync(member, email);
+
+        var role = await ReadAsync<Role>(admin.PostAsJsonAsync(Admin + "/roles",
+            new { name = $"Reviewer {Guid.NewGuid():N}" }), HttpStatusCode.Created);
+        var renamed = $"Auditor {Guid.NewGuid():N}";
+        await ExpectAsync(admin.PutAsJsonAsync($"{Admin}/roles/{role.Id}", new { name = renamed }), HttpStatusCode.NoContent);
+        await ExpectAsync(admin.PutAsync($"{Admin}/users/{account.Id}/roles/{role.Id}", null), HttpStatusCode.NoContent);
+        var assigned = Assert.Single(await ReadAsync<Role[]>(admin.GetAsync($"{Admin}/users/{account.Id}/roles"), HttpStatusCode.OK));
+        Assert.Equal(renamed, assigned.Name);
+        await ExpectAsync(admin.DeleteAsync($"{Admin}/roles/{role.Id}"), HttpStatusCode.NoContent);
+        Assert.Empty(await ReadAsync<Role[]>(admin.GetAsync($"{Admin}/users/{account.Id}/roles"), HttpStatusCode.OK));
+
+        var audit = await ReadAsync<AuditEntry[]>(admin.GetAsync(Admin + "/audit?limit=100"), HttpStatusCode.OK);
+        Assert.Contains(audit, entry => entry.Action == "user.disabled" && entry.UserId == account.Id);
+        Assert.Contains(audit, entry => entry.Action == "role.deleted" && entry.RoleId == role.Id);
+    }
+
     private static HttpClient CreateClient(WebApplicationFactory<Program> app) =>
         app.CreateClient(new WebApplicationFactoryClientOptions
         {
@@ -277,6 +345,8 @@ public sealed class BackendTests(BackendDatabase database) : IClassFixture<Backe
 
     private static string NewEmail() => $"test-{Guid.NewGuid():N}@example.test";
 
+    private sealed record ProblemTitle(string Title);
+    private sealed record ManagedAccount(string Id, bool EmailConfirmed);
     private sealed record Profile(string Id, string? DisplayName);
     private sealed record Role(string Id, string Name);
     private sealed record Note(Guid Id, Guid Version);

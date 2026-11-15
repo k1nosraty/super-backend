@@ -178,7 +178,6 @@ namespace SuperBackend.Identity.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("RoleId")
-                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<string>("UserId")
@@ -210,6 +209,9 @@ namespace SuperBackend.Identity.Migrations
                         .HasColumnType("character varying(256)");
 
                     b.Property<bool>("EmailConfirmed")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDisabled")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("LockoutEnabled")

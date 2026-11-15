@@ -1,0 +1,26 @@
+{
+    "$schema": "https://json.schemastore.org/template",
+    "author": "SuperBackend",
+    "classifications": ["Web", "API", "Modular Monolith"],
+    "identity": "SuperBackend.ModularStarter.CSharp",
+    "name": "SuperBackend Modular API",
+    "shortName": "super-backend",
+    "sourceName": "SuperBackend",
+    "preferNameDirectory": true,
+    "tags": { "language": "C#", "type": "solution" },
+    "sources": [
+        {
+            "include": [
+                "src/**/*", "tests/**/*", "scripts/**/*", "docs/**/*", ".github/**/*",
+                ".dockerignore", ".editorconfig", ".gitignore", ".env.example",
+                "Directory.Build.props", "Directory.Packages.props", "Dockerfile", "LICENSE",
+                "README.md", "SuperBackend.slnx", "compose.yaml", "dotnet-tools.json", "global.json"
+            ],
+            "exclude": [
+                "**/bin/**", "**/obj/**", "**/TestResults/**", "scripts/new-project.sh",
+                "**/.env", "**/*.user", "**/*.pfx", "**/*.pem", "**/*.dump"
+            ],
+            "copyOnly": ["LICENSE", "**/*.woff2", "**/OFL.txt"]
+        }
+    ]
+}

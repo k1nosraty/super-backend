@@ -1,0 +1,66 @@
+<?xml version='1.0' encoding='utf-8'?>
+<root>
+    <resheader name="resmimetype">
+        <value>text/microsoft-resx</value>
+    </resheader>
+    <resheader name="version">
+        <value>2.0</value>
+    </resheader>
+    <resheader name="reader">
+        <value>System.Resources.ResXResourceReader, System.Windows.Forms</value>
+    </resheader>
+    <resheader name="writer">
+        <value>System.Resources.ResXResourceWriter, System.Windows.Forms</value>
+    </resheader>
+    <data name="Http400" xml:space="preserve">
+        <value>Bad Request</value>
+    </data>
+    <data name="Http401" xml:space="preserve">
+        <value>Unauthorized</value>
+    </data>
+    <data name="Http403" xml:space="preserve">
+        <value>Forbidden</value>
+    </data>
+    <data name="Http404" xml:space="preserve">
+        <value>Not Found</value>
+    </data>
+    <data name="Http409" xml:space="preserve">
+        <value>Conflict</value>
+    </data>
+    <data name="Http429" xml:space="preserve">
+        <value>Too Many Requests</value>
+    </data>
+    <data name="Http500" xml:space="preserve">
+        <value>An error occurred while processing your request.</value>
+    </data>
+    <data name="AdministratorProtected" xml:space="preserve">
+        <value>Administrator accounts are protected.</value>
+    </data>
+    <data name="CurrentPasswordRequired" xml:space="preserve">
+        <value>Current password required</value>
+    </data>
+    <data name="RequiredField" xml:space="preserve">
+        <value>A required field is empty.</value>
+    </data>
+    <data name="DataChanged" xml:space="preserve">
+        <value>The data changed. Retry the request.</value>
+    </data>
+    <data name="ConfirmEmailSubject" xml:space="preserve">
+        <value>Confirm your email</value>
+    </data>
+    <data name="ResetPasswordSubject" xml:space="preserve">
+        <value>Reset your password</value>
+    </data>
+    <data name="PasswordResetCodeSubject" xml:space="preserve">
+        <value>Password reset code</value>
+    </data>
+    <data name="AccountAlreadyExists" xml:space="preserve">
+        <value>An account with that email already exists.</value>
+    </data>
+    <data name="InvalidInvitation" xml:space="preserve">
+        <value>The invitation code is invalid or has expired.</value>
+    </data>
+    <data name="InviteSubject" xml:space="preserve">
+        <value>Your account invitation</value>
+    </data>
+</root>

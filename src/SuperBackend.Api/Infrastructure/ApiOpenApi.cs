@@ -10,7 +10,7 @@ internal static class ApiOpenApi
     {
         options.AddDocumentTransformer((document, _, _) =>
         {
-            document.Info.Title = "Super Backend API";
+            document.Info.Title = "SuperBackend API";
             document.Info.Version = "v1";
             document.Components ??= new OpenApiComponents();
             document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();

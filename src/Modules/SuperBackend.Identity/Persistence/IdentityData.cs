@@ -7,6 +7,7 @@ namespace SuperBackend.Identity;
 internal sealed class Account : IdentityUser
 {
     public string? DisplayName { get; set; }
+    public bool IsDisabled { get; set; }
 }
 
 internal sealed record RolePermission(string RoleId, string Name);
@@ -17,7 +18,7 @@ internal sealed class AccessAudit
     public required DateTimeOffset OccurredAt { get; init; }
     public required string ActorId { get; init; }
     public required string Action { get; init; }
-    public required string RoleId { get; init; }
+    public string? RoleId { get; init; }
     public string? UserId { get; init; }
     public string? Permission { get; init; }
 }

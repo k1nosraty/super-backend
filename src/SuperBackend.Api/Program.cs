@@ -1,3 +1,7 @@
+using System.Diagnostics;
+using Microsoft.Extensions.Localization;
+using Microsoft.AspNetCore.WebUtilities;
+using SuperBackend.Platform;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using SuperBackend.Api;
 using SuperBackend.Identity;
@@ -16,10 +20,24 @@ var notesEnabled = builder.Configuration.GetValue<bool>("Modules:Notes");
 var development = builder.Environment.IsDevelopment();
 
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddApiLocalization();
+builder.AddObservability();
 builder.Services.AddOpenApi(ApiOpenApi.Configure);
 builder.Services.AddProblemDetails(options =>
     options.CustomizeProblemDetails = context =>
-        context.ProblemDetails.Extensions["traceId"] = context.HttpContext.TraceIdentifier);
+    {
+        var text = context.HttpContext.RequestServices.GetRequiredService<IStringLocalizer<BackendText>>();
+        var status = context.ProblemDetails.Status;
+        if (status is int code && !text[$"Http{code}"].ResourceNotFound &&
+            (context.ProblemDetails.Title is null || context.ProblemDetails.Title == ReasonPhrases.GetReasonPhrase(code) ||
+                context.ProblemDetails.Title == "An error occurred while processing your request."))
+        {
+            context.ProblemDetails.Title = text[$"Http{code}"];
+        }
+
+        context.ProblemDetails.Extensions["traceId"] =
+            Activity.Current?.TraceId.ToString() ?? context.HttpContext.TraceIdentifier;
+    });
 builder.Services.AddExceptionHandler<PersistenceErrors>();
 builder.AddApiSecurity();
 builder.AddIdentityModule(connection);
@@ -45,6 +63,7 @@ if (bootstrap)
 }
 
 app.UseForwardedHeaders();
+app.UseRequestLocalization();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 if (!development)
@@ -55,6 +74,8 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
     context.Response.Headers["Referrer-Policy"] = "no-referrer";
     context.Response.Headers.CacheControl = "no-store";
+    if (context.Request.Path.StartsWithSegments("/admin"))
+        context.Response.Headers.ContentSecurityPolicy = "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'";
     if (!development && !context.Request.IsHttps)
     {
         context.Response.StatusCode = StatusCodes.Status400BadRequest;
@@ -80,6 +101,7 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
     Predicate = check => check.Tags.Contains("ready")
 }).AllowAnonymous().DisableRateLimiting();
 
+app.MapAdminPanel();
 app.MapIdentityModule();
 if (notesEnabled)
     app.MapNotesModule();
