@@ -56,6 +56,20 @@ namespace SuperBackend.Notes.Migrations
 
                     b.ToTable("Notes", "notes");
                 });
+
+            modelBuilder.Entity("SuperBackend.Notes.NoteCreationStats", b =>
+                {
+                    b.Property<string>("OwnerId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<long>("TotalCreated")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("OwnerId");
+
+                    b.ToTable("NoteCreationStats", "notes");
+                });
 #pragma warning restore 612, 618
         }
     }

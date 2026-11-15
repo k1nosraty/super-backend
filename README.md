@@ -74,7 +74,7 @@ Send `Accept-Language: fa` for localized API error titles and outgoing email sub
 Use `./scripts/new-service.sh InventoryReports` to scaffold and register an optional service with a controller, interface, implementation, and model.
 
 - [Optional OIDC, multitenancy, and durable jobs](docs/OPTIONAL-MODULES.md)
-- [Transactional Outbox and consumer deduplication](docs/TRANSACTIONAL-OUTBOX.md)
+- [Transactional Outbox and consumer deduplication, including Notes](docs/TRANSACTIONAL-OUTBOX.md)
 - [Architecture, folder layout, and adding a module](docs/ARCHITECTURE.md)
 - [Lifecycle coverage, deployment configuration, databases, and recovery](docs/OPERATIONS.md)
 - [ASP.NET Core Identity bearer tokens](https://learn.microsoft.com/en-us/aspnet/core/security/authentication/identity-api-authorization?view=aspnetcore-10.0)

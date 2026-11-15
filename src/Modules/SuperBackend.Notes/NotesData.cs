@@ -12,6 +12,8 @@ internal sealed class Note
     public Guid Version { get; set; }
 }
 
+internal sealed record NoteCreationStats(string OwnerId, long TotalCreated);
+
 internal sealed class NotesData(DbContextOptions<NotesData> options) : DbContext(options)
 {
     public const string Schema = "notes";
@@ -20,6 +22,12 @@ internal sealed class NotesData(DbContextOptions<NotesData> options) : DbContext
     protected override void OnModelCreating(ModelBuilder model)
     {
         model.HasDefaultSchema(Schema);
+        model.Entity<NoteCreationStats>(entity =>
+        {
+            entity.ToTable("NoteCreationStats");
+            entity.HasKey(stats => stats.OwnerId);
+            entity.Property(stats => stats.OwnerId).HasMaxLength(128);
+        });
         model.Entity<Note>(entity =>
         {
             entity.HasIndex(note => new { note.OwnerId, note.CreatedAt, note.Id });

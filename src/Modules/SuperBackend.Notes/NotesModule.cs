@@ -2,9 +2,11 @@ using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using SuperBackend.Jobs;
 using SuperBackend.Platform;
 
 namespace SuperBackend.Notes;
@@ -22,6 +24,13 @@ public static class NotesModule
             .AddPermission(Read, "Read your own notes")
             .AddPermission(Write, "Create, edit and delete your own notes");
         services.AddHealthChecks().AddDbContextCheck<NotesData>("notes-db", tags: ["ready"]);
+    }
+
+    public static void AddNotesOutbox(this IServiceCollection services, bool publishCreatedJobs)
+    {
+        services.AddScoped<IDurableJobHandler, NoteCreatedHandler>();
+        if (publishCreatedJobs)
+            services.AddScoped<NoteOutboxWriter>();
     }
 
     public static void MapNotesModule(this WebApplication app)
@@ -53,7 +62,7 @@ public static class NotesModule
     }
 
     private static async Task<IResult> CreateAsync(NoteInput input, ClaimsPrincipal user, NotesData db,
-        TimeProvider time, CancellationToken ct)
+        TimeProvider time, [FromServices] NoteOutboxWriter? outbox, CancellationToken ct)
     {
         var note = new Note
         {
@@ -65,7 +74,11 @@ public static class NotesModule
             Version = Guid.NewGuid()
         };
         db.Notes.Add(note);
-        await db.SaveChangesAsync(ct);
+        if (outbox is null)
+            await db.SaveChangesAsync(ct);
+        else
+            await outbox.SaveCreatedAsync(note, ct);
+
         return Results.CreatedAtRoute("GetNote", new { note.Id }, ToView(note));
     }
 

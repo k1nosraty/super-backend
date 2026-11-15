@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="../../SuperBackend.Platform/SuperBackend.Platform.csproj" />
+    <ProjectReference Include="../SuperBackend.Jobs/SuperBackend.Jobs.csproj" />
+    <ProjectReference Include="../SuperBackend.Outbox/SuperBackend.Outbox.csproj" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
   </ItemGroup>

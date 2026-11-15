@@ -182,6 +182,22 @@
           "Microsoft.Extensions.Logging.Abstractions": "10.0.0"
         }
       },
+      "superbackend.jobs": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore": "[10.0.15, )",
+          "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
+          "SuperBackend.Platform": "[1.0.0, )"
+        }
+      },
+      "superbackend.outbox": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore": "[10.0.15, )",
+          "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
+          "SuperBackend.Jobs": "[1.0.0, )"
+        }
+      },
       "superbackend.platform": {
         "type": "Project"
       }

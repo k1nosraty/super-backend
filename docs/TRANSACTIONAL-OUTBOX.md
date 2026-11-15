@@ -77,3 +77,19 @@ await transaction.CommitAsync(ct);
 An exception before commit rolls back both the receipt and the effect. If the process fails after commit and the queue retries the job, the receipt stops the effect from being applied again. Concurrent attempts use the same unique receipt key. Keep all database effects after the receipt check and in the supplied transaction. For external effects, propagate the job ID as an idempotency key to the external system and handle its delivery guarantees separately.
 
 Retain outbox messages, jobs, and inbox receipts for the applicable retry and deduplication windows. The module exposes persistent state and leaves retention policy to the deployment. Integration tests inject a PostgreSQL relay failure after queue insertion and handler failures on both sides of commit.
+
+## Notes integration
+
+To publish a job from `POST /api/v1/notes`, apply the migrations and use the same settings on the producer:
+
+```bash
+Modules__Notes=true Modules__Jobs=true Modules__Outbox=true Notes__PublishCreatedJobs=true ./scripts/db.sh apply
+```
+
+`Notes__PublishCreatedJobs` defaults to false. When enabled, the endpoint inserts the note and writes a `notes.created` outbox message in the same transaction. A write failure rolls both back. The note ID is the job ID. The payload contains the owner's ID and excludes the private note title and body.
+
+The built-in handler updates `notes."NoteCreationStats"`. This projection counts successfully processed creation events per owner, including creations whose notes were later deleted. It starts counting with events from enabled producers. The handler inserts its `notes.created` inbox receipt and increments the counter in the same PostgreSQL transaction. A retried job therefore leaves the counter unchanged after its first successful commit.
+
+Enable Notes, Jobs, and Outbox on every active Jobs worker that shares this queue. Workers can claim any job type. Keep at least one Outbox relay running. Turning publishing off allows the registered handler to finish the existing backlog.
+
+The end-to-end test calls the authenticated Notes API, injects an outbox write failure, and verifies the note rolls back. It also injects a queue acknowledgement failure after the real handler commits and checks that the worker reclaims the job without incrementing the counter twice.

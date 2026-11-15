@@ -26,6 +26,9 @@ var federationEnabled = builder.Configuration.GetValue<bool>("Modules:Federation
 var tenancyEnabled = builder.Configuration.GetValue<bool>("Modules:Tenancy");
 var jobsEnabled = builder.Configuration.GetValue<bool>("Modules:Jobs");
 var outboxEnabled = builder.Configuration.GetValue<bool>("Modules:Outbox");
+var publishNoteJobs = builder.Configuration.GetValue<bool>("Notes:PublishCreatedJobs");
+if (publishNoteJobs && (!notesEnabled || !jobsEnabled || !outboxEnabled))
+    throw new InvalidOperationException("Notes:PublishCreatedJobs requires Modules:Notes, Modules:Jobs and Modules:Outbox.");
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddApiLocalization();
@@ -61,6 +64,8 @@ if (jobsEnabled)
     mvc.AddJobsModule(connection, builder.Configuration);
 if (outboxEnabled)
     builder.Services.AddOutboxModule(connection, builder.Configuration);
+if (notesEnabled && outboxEnabled)
+    builder.Services.AddNotesOutbox(publishNoteJobs);
 ProductModules.Register(builder, mvc);
 
 var app = builder.Build();
