@@ -1,0 +1,13 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace __ROOT__.__SERVICE__;
+
+[ApiController]
+[Route("api/v1/features/__ROUTE__")]
+[Authorize(Policy = __SERVICE__Module.Read)]
+public sealed class __SERVICE__Controller(I__SERVICE__Service service) : ControllerBase
+{
+    [HttpGet]
+    public __SERVICE__Status Get() => service.GetStatus();
+}

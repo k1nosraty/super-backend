@@ -15,6 +15,7 @@ export const locales = {
         invite: "Invite user", send: "Send invitation", invited: "Invitation sent.", save: "Save name", delete: "Delete role",
         confirmDelete: "Delete this role and remove its memberships and permissions?",
         "role.renamed": "Role renamed", "role.deleted": "Role deleted", "user.invited": "User invited",
+        "user.oidc.linked": "Organization account linked", "user.oidc.unlinked": "Organization account unlinked",
         "user.disabled": "Account suspended", "user.enabled": "Account reactivated", "user.sessions.revoked": "Sessions revoked",
         "role.created": "Role created", "permission.granted": "Permission granted", "permission.revoked": "Permission revoked",
         "role.assigned": "Role assigned", "role.removed": "Role removed", "administrator.provisioned": "Administrator provisioned"
@@ -35,6 +36,7 @@ export const locales = {
         invite: "دعوت کاربر", send: "ارسال دعوت‌نامه", invited: "دعوت‌نامه ارسال شد.", save: "ذخیرهٔ نام", delete: "حذف نقش",
         confirmDelete: "این نقش همراه با عضویت‌ها و مجوزهایش حذف شود؟",
         "role.renamed": "نام نقش تغییر کرد", "role.deleted": "نقش حذف شد", "user.invited": "کاربر دعوت شد",
+        "user.oidc.linked": "حساب سازمانی متصل شد", "user.oidc.unlinked": "اتصال حساب سازمانی لغو شد",
         "user.disabled": "حساب تعلیق شد", "user.enabled": "حساب فعال شد", "user.sessions.revoked": "نشست‌ها لغو شدند",
         "role.created": "نقش ساخته شد", "permission.granted": "مجوز داده شد", "permission.revoked": "مجوز گرفته شد",
         "role.assigned": "نقش اختصاص یافت", "role.removed": "نقش برداشته شد", "administrator.provisioned": "حساب مدیر ساخته شد"

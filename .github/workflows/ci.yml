@@ -18,10 +18,13 @@ jobs:
       - run: dotnet format whitespace --no-restore --verify-no-changes
       - run: ./scripts/db.sh check Identity
       - run: ./scripts/db.sh check Notes
+      - run: ./scripts/db.sh check Tenancy
+      - run: ./scripts/db.sh check Jobs
       - if: ${{ hashFiles('.template.config/template.json') != '' }}
         run: |
           ./scripts/new-project.sh Example.Inventory "$RUNNER_TEMP/Example.Inventory"
           cd "$RUNNER_TEMP/Example.Inventory"
+          ./scripts/new-service.sh InventoryReports
           dotnet restore --locked-mode
           dotnet build --configuration Release --no-restore
       - run: docker compose build migrate

@@ -1,0 +1,21 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using __ROOT__.Platform;
+
+namespace __ROOT__.__SERVICE__;
+
+public static class __SERVICE__Module
+{
+    public const string Read = "__ROUTE__.read";
+
+    public static void Register(WebApplicationBuilder builder, IMvcBuilder mvc)
+    {
+        if (!builder.Configuration.GetValue<bool>("Modules:__SERVICE__"))
+            return;
+
+        mvc.AddApplicationPart(typeof(__SERVICE__Module).Assembly);
+        builder.Services.AddScoped<I__SERVICE__Service, __SERVICE__Service>();
+        builder.Services.AddAuthorizationBuilder().AddPermission(Read, "Read __SERVICE__");
+    }
+}

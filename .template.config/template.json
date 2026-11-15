@@ -11,7 +11,7 @@
     "sources": [
         {
             "include": [
-                "src/**/*", "tests/**/*", "scripts/**/*", "docs/**/*", ".github/**/*",
+                "src/**/*", "tests/**/*", "scripts/**/*", "templates/**/*", "docs/**/*", ".github/**/*",
                 ".dockerignore", ".editorconfig", ".gitignore", ".env.example",
                 "Directory.Build.props", "Directory.Packages.props", "Dockerfile", "LICENSE",
                 "README.md", "SuperBackend.slnx", "compose.yaml", "dotnet-tools.json", "global.json"

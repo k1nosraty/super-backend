@@ -19,6 +19,7 @@ namespace SuperBackend.Identity;
 public static class IdentityModule
 {
     public const string RateLimit = "identity";
+    public const string AdministrationPolicy = AccessPolicies.AdministrationPolicy;
 
     public static void AddIdentityModule(this WebApplicationBuilder builder, string connection)
     {
@@ -57,6 +58,7 @@ public static class IdentityModule
             options.TokenLifespan = TimeSpan.FromHours(2));
 
         services.AddHttpContextAccessor();
+        services.AddScoped<IFederatedAccounts, FederatedAccounts>();
         services.AddScoped<IAuthorizationHandler, AccessPolicies>();
         services.AddAuthorizationBuilder().AddPolicy(AccessPolicies.AdministrationPolicy,
             policy => policy.RequireAuthenticatedUser()

@@ -276,7 +276,7 @@ public sealed class BackendTests(BackendDatabase database) : IClassFixture<Backe
         Assert.Contains(audit, entry => entry.Action == "role.deleted" && entry.RoleId == role.Id);
     }
 
-    private static HttpClient CreateClient(WebApplicationFactory<Program> app) =>
+    internal static HttpClient CreateClient(WebApplicationFactory<Program> app) =>
         app.CreateClient(new WebApplicationFactoryClientOptions
         {
             BaseAddress = new Uri("http://localhost:5080"),
@@ -284,7 +284,7 @@ public sealed class BackendTests(BackendDatabase database) : IClassFixture<Backe
             HandleCookies = false
         });
 
-    private static async Task<string> CreateAccountAsync(HttpClient client)
+    internal static async Task<string> CreateAccountAsync(HttpClient client)
     {
         var email = NewEmail();
         await ExpectAsync(client.PostAsJsonAsync(Auth + "/register", new { email, password = Password }), HttpStatusCode.OK);
@@ -293,7 +293,7 @@ public sealed class BackendTests(BackendDatabase database) : IClassFixture<Backe
         return email;
     }
 
-    private static async Task AuthenticateAsync(HttpClient client, string email)
+    internal static async Task AuthenticateAsync(HttpClient client, string email)
     {
         var tokens = await LoginAsync(client, email);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
@@ -302,14 +302,14 @@ public sealed class BackendTests(BackendDatabase database) : IClassFixture<Backe
     private static Task<Tokens> LoginAsync(HttpClient client, string email, string password = Password) =>
         ReadAsync<Tokens>(client.PostAsJsonAsync(Auth + "/login", new { email, password }), HttpStatusCode.OK);
 
-    private static async Task<T> ReadAsync<T>(Task<HttpResponseMessage> request, HttpStatusCode expected)
+    internal static async Task<T> ReadAsync<T>(Task<HttpResponseMessage> request, HttpStatusCode expected)
     {
         using var response = await request;
         await CheckAsync(response, expected);
         return (await response.Content.ReadFromJsonAsync<T>())!;
     }
 
-    private static async Task ExpectAsync(Task<HttpResponseMessage> request, HttpStatusCode expected)
+    internal static async Task ExpectAsync(Task<HttpResponseMessage> request, HttpStatusCode expected)
     {
         using var response = await request;
         await CheckAsync(response, expected);

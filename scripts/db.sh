@@ -32,7 +32,7 @@ ef() {
     (
         cd "$root"
         dotnet tool restore
-        ASPNETCORE_ENVIRONMENT=Development Modules__Notes=true \
+        env ASPNETCORE_ENVIRONMENT=Development "Modules__${module}=true" \
             dotnet ef migrations "$@" --context "$context" --project "$target" --startup-project "$api"
     )
 }

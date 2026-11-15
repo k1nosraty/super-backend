@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
+using System.Security.Cryptography;
 using SuperBackend.Identity;
 using SuperBackend.Notes;
 using Xunit;
@@ -15,12 +16,34 @@ public sealed class BackendDatabase : IAsyncLifetime
     private readonly string _name = $"super_backend_test_{Guid.NewGuid():N}";
     private readonly string _server = Environment.GetEnvironmentVariable("SUPERBACKEND_TEST_DATABASE") ?? LocalConnection;
 
+    private readonly string _tenantRole = $"tenant_runtime_{Guid.NewGuid():N}";
+
+    internal string DatabaseConnection =>
+        new NpgsqlConnectionStringBuilder(_server) { Database = _name }.ConnectionString;
+
+    internal async Task<string> CreateTenantRuntimeRoleAsync()
+    {
+        var password = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
+        await using var connection = new NpgsqlConnection(DatabaseConnection);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand($"""
+            CREATE ROLE "{_tenantRole}" LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD '{password}';
+            GRANT USAGE ON SCHEMA tenancy TO "{_tenantRole}";
+            GRANT SELECT, INSERT, UPDATE, DELETE ON tenancy."Documents" TO "{_tenantRole}";
+            """, connection);
+        await command.ExecuteNonQueryAsync();
+        return new NpgsqlConnectionStringBuilder(DatabaseConnection)
+        {
+            Username = _tenantRole,
+            Password = password
+        }.ConnectionString;
+    }
+
     internal WebApplicationFactory<Program> CreateApp(Dictionary<string, string?>? overrides = null)
     {
-        var database = new NpgsqlConnectionStringBuilder(_server) { Database = _name };
         var configuration = new Dictionary<string, string?>
         {
-            ["ConnectionStrings:Main"] = database.ConnectionString,
+            ["ConnectionStrings:Main"] = DatabaseConnection,
             ["RateLimits:RequestsPerMinute"] = "500",
             ["RateLimits:IdentityRequestsPerMinute"] = "200",
             ["Smtp:Host"] = Environment.GetEnvironmentVariable("SUPERBACKEND_TEST_SMTP_HOST") ?? "localhost",
@@ -51,6 +74,8 @@ public sealed class BackendDatabase : IAsyncLifetime
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand($"""DROP DATABASE IF EXISTS "{_name}" WITH (FORCE)""", connection);
         await command.ExecuteNonQueryAsync();
+        await using var role = new NpgsqlCommand($"""DROP ROLE IF EXISTS "{_tenantRole}" """, connection);
+        await role.ExecuteNonQueryAsync();
     }
 
     private sealed class ConfiguredApplication(Dictionary<string, string?> configuration) : WebApplicationFactory<Program>

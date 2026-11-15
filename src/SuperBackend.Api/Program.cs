@@ -5,6 +5,9 @@ using SuperBackend.Platform;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using SuperBackend.Api;
 using SuperBackend.Identity;
+using SuperBackend.Federation;
+using SuperBackend.Jobs;
+using SuperBackend.Tenancy;
 using SuperBackend.Notes;
 
 var migrate = args is ["--migrate"];
@@ -18,6 +21,9 @@ var connection = builder.Configuration.GetConnectionString("Main")
     ?? throw new InvalidOperationException("ConnectionStrings:Main is required.");
 var notesEnabled = builder.Configuration.GetValue<bool>("Modules:Notes");
 var development = builder.Environment.IsDevelopment();
+var federationEnabled = builder.Configuration.GetValue<bool>("Modules:Federation");
+var tenancyEnabled = builder.Configuration.GetValue<bool>("Modules:Tenancy");
+var jobsEnabled = builder.Configuration.GetValue<bool>("Modules:Jobs");
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddApiLocalization();
@@ -44,6 +50,15 @@ builder.AddIdentityModule(connection);
 if (notesEnabled)
     builder.Services.AddNotesModule(connection);
 
+var mvc = builder.Services.AddControllers().ConfigureApplicationPartManager(manager => manager.ApplicationParts.Clear());
+if (federationEnabled)
+    builder.AddFederationModule(mvc);
+if (tenancyEnabled)
+    mvc.AddTenancyModule(connection, builder.Configuration.GetConnectionString("TenantData") ?? connection);
+if (jobsEnabled)
+    mvc.AddJobsModule(connection, builder.Configuration);
+ProductModules.Register(builder, mvc);
+
 var app = builder.Build();
 
 if (migrate)
@@ -51,6 +66,10 @@ if (migrate)
     await app.Services.MigrateIdentityAsync();
     if (notesEnabled)
         await app.Services.MigrateNotesAsync();
+    if (tenancyEnabled)
+        await app.Services.MigrateTenancyAsync();
+    if (jobsEnabled)
+        await app.Services.MigrateJobsAsync();
     return;
 }
 
@@ -103,6 +122,7 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 
 app.MapAdminPanel();
 app.MapIdentityModule();
+app.MapControllers();
 if (notesEnabled)
     app.MapNotesModule();
 
