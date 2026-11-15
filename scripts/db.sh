@@ -32,6 +32,7 @@ ef() {
     (
         cd "$root"
         dotnet tool restore
+        if [[ $module == Outbox ]]; then export Modules__Jobs=true; fi
         env ASPNETCORE_ENVIRONMENT=Development "Modules__${module}=true" \
             dotnet ef migrations "$@" --context "$context" --project "$target" --startup-project "$api"
     )

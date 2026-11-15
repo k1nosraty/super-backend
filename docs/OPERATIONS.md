@@ -11,7 +11,7 @@
 | Verification and delivery | Release build, integration suite with real PostgreSQL and Mailpit, and GitHub Actions |
 | Observation and recovery | Probe endpoints, correlated JSON logs, opt-in OTLP metrics/traces, and a development backup/restore rehearsal |
 
-The optional modules add OIDC sign-in, tenant isolation and a PostgreSQL job queue. See [optional-module configuration](OPTIONAL-MODULES.md). Transactional outbox and object storage depend on product requirements. The SMTP sender currently dispatches inline. Production load targets, RPO/RTO, retention, and incident ownership depend on the deployment.
+The optional modules add OIDC sign-in, tenant isolation and a PostgreSQL job queue. See [optional-module configuration](OPTIONAL-MODULES.md). The [Transactional Outbox](TRANSACTIONAL-OUTBOX.md) can be enabled for atomic database-backed job recording. The SMTP sender currently dispatches inline. Production load targets, RPO/RTO, retention, and incident ownership depend on the deployment.
 
 ## Database commands
 
@@ -20,6 +20,7 @@ The optional modules add OIDC sign-in, tenant isolation and a PostgreSQL job que
 ./scripts/db.sh check Notes
 ./scripts/db.sh check Tenancy
 ./scripts/db.sh check Jobs
+./scripts/db.sh check Outbox
 ./scripts/db.sh add Notes AddArchiveState
 ./scripts/db.sh sql Identity ./identity-migrations.sql
 ./scripts/db.sh apply

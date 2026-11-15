@@ -16,5 +16,6 @@
     <ProjectReference Include="..\Modules\SuperBackend.Federation\SuperBackend.Federation.csproj" />
     <ProjectReference Include="..\Modules\SuperBackend.Tenancy\SuperBackend.Tenancy.csproj" />
     <ProjectReference Include="..\Modules\SuperBackend.Jobs\SuperBackend.Jobs.csproj" />
+    <ProjectReference Include="..\Modules\SuperBackend.Outbox\SuperBackend.Outbox.csproj" />
   </ItemGroup>
 </Project>

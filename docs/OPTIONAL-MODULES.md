@@ -1,12 +1,13 @@
 # Optional modules
 
-The host registers a module's controllers, services, and permissions only when its flag is enabled. The three flags default to false in every environment.
+The host registers a module's controllers, services, and permissions only when its flag is enabled. The flags below default to false in every environment.
 
 | Flag | Capability | Schema |
 | --- | --- | --- |
 | `Modules__Federation=true` | Organization sign-in with OpenID Connect | Existing `identity` external login table |
 | `Modules__Tenancy=true` | Tenant directory, tenant membership, and PostgreSQL-isolated documents | `tenancy` |
 | `Modules__Jobs=true` | PostgreSQL job queue, durable worker claims, and operations API | `jobs` |
+| `Modules__Outbox=true` | Transactional job recording, relay, and consumer receipts. Requires Jobs. | `outbox` |
 
 Run the migration command with the same module flags used by the service. With the SDK and the local PostgreSQL container:
 
@@ -80,7 +81,7 @@ await queue.EnqueueAsync(operationId, "reports.rebuild",
     JsonSerializer.SerializeToElement(new { reportId }), maxAttempts: 5, ct);
 ```
 
-Use a stable, nonempty job ID as the idempotency key. The first insert is retained when the same ID is submitted again. An enqueue call commits its queue record independently from other modules' writes. When both writes must be atomic, build a transactional outbox against the originating data store.
+Use a stable, nonempty job ID as the idempotency key. The first insert is retained when the same ID is submitted again. An enqueue call commits its queue record independently from other modules' writes. When both writes must commit together, use the optional [Transactional Outbox](TRANSACTIONAL-OUTBOX.md) in the originating database transaction.
 
 Workers use PostgreSQL `FOR UPDATE SKIP LOCKED` and bounded leases. A worker claims a job with a unique lease token, and only that unexpired lease can mark its result. Unfinished leases become eligible for recovery. Failed jobs retry with bounded exponential delay and end in `dead` after their configured attempt budget. Delivery is **at least once**. Make handler side effects idempotent using `JobExecution.Id`. Propagate cancellation to downstream calls and keep attempts within the configured deadline.
 

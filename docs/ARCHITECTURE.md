@@ -11,6 +11,7 @@ src/
     SuperBackend.Identity/   Accounts, administration, SMTP, PostgreSQL persistence
     SuperBackend.Jobs/       Optional PostgreSQL queue and worker
     SuperBackend.Notes/      Optional feature with ownership and concurrency checks
+    SuperBackend.Outbox/     Optional transactional writer, relay, and inbox
     SuperBackend.Tenancy/    Optional tenant directory, membership, and RLS
 tests/
   SuperBackend.IntegrationTests/
@@ -48,6 +49,7 @@ The Notes module shows CRUD, offset pagination, identity ownership, and an optim
 | `notes` | `Notes` holds owner ID, title, body, creation time, and version. The module queries within the caller's owner ID before returning or updating records. |
 | `tenancy` | Tenant directory, memberships, and documents protected by PostgreSQL RLS. |
 | `jobs` | Durable job payloads, retry state, and lease metadata. |
+| `outbox` | Job submissions, dispatch status, and per-consumer deduplication receipts. |
 | Each schema | Independent `__EFMigrationsHistory`. |
 
 ## Add a language

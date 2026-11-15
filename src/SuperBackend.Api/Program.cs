@@ -7,6 +7,7 @@ using SuperBackend.Api;
 using SuperBackend.Identity;
 using SuperBackend.Federation;
 using SuperBackend.Jobs;
+using SuperBackend.Outbox;
 using SuperBackend.Tenancy;
 using SuperBackend.Notes;
 
@@ -24,6 +25,7 @@ var development = builder.Environment.IsDevelopment();
 var federationEnabled = builder.Configuration.GetValue<bool>("Modules:Federation");
 var tenancyEnabled = builder.Configuration.GetValue<bool>("Modules:Tenancy");
 var jobsEnabled = builder.Configuration.GetValue<bool>("Modules:Jobs");
+var outboxEnabled = builder.Configuration.GetValue<bool>("Modules:Outbox");
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddApiLocalization();
@@ -57,6 +59,8 @@ if (tenancyEnabled)
     mvc.AddTenancyModule(connection, builder.Configuration.GetConnectionString("TenantData") ?? connection);
 if (jobsEnabled)
     mvc.AddJobsModule(connection, builder.Configuration);
+if (outboxEnabled)
+    builder.Services.AddOutboxModule(connection, builder.Configuration);
 ProductModules.Register(builder, mvc);
 
 var app = builder.Build();
@@ -70,6 +74,8 @@ if (migrate)
         await app.Services.MigrateTenancyAsync();
     if (jobsEnabled)
         await app.Services.MigrateJobsAsync();
+    if (outboxEnabled)
+        await app.Services.MigrateOutboxAsync();
     return;
 }
 

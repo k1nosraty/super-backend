@@ -8,6 +8,7 @@
     <Project Path="src/Modules/SuperBackend.Identity/SuperBackend.Identity.csproj" />
     <Project Path="src/Modules/SuperBackend.Jobs/SuperBackend.Jobs.csproj" />
     <Project Path="src/Modules/SuperBackend.Notes/SuperBackend.Notes.csproj" />
+    <Project Path="src/Modules/SuperBackend.Outbox/SuperBackend.Outbox.csproj" />
     <Project Path="src/Modules/SuperBackend.Tenancy/SuperBackend.Tenancy.csproj" />
   </Folder>
   <Folder Name="/tests/">

@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,18 +8,11 @@ internal sealed class PostgresJobQueue(JobsData data) : IDurableJobQueue, IJobOp
     public async Task<bool> EnqueueAsync(Guid id, string type, JsonElement payload, int maxAttempts = 5,
         CancellationToken ct = default)
     {
-        ArgumentOutOfRangeException.ThrowIfEqual(id, Guid.Empty);
-        ArgumentException.ThrowIfNullOrWhiteSpace(type);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(type.Length, 100);
-        ArgumentOutOfRangeException.ThrowIfLessThan(maxAttempts, 1);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(maxAttempts, 20);
-        var json = payload.GetRawText();
-        if (Encoding.UTF8.GetByteCount(json) > 65536)
-            throw new ArgumentException("The payload exceeds 64 KiB.", nameof(payload));
+        var submission = new JobSubmission(id, type, payload, maxAttempts);
 
         return await data.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO jobs."Jobs" ("Id", "Type", "Payload", "Status", "Attempts", "MaxAttempts", "AvailableAt")
-            VALUES ({id}, {type}, CAST({json} AS jsonb), 'pending', 0, {maxAttempts}, now())
+            VALUES ({id}, {type}, CAST({submission.PayloadJson} AS jsonb), 'pending', 0, {maxAttempts}, now())
             ON CONFLICT ("Id") DO NOTHING
             """, ct) != 0;
     }

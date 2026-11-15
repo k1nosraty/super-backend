@@ -20,6 +20,7 @@ jobs:
       - run: ./scripts/db.sh check Notes
       - run: ./scripts/db.sh check Tenancy
       - run: ./scripts/db.sh check Jobs
+      - run: ./scripts/db.sh check Outbox
       - if: ${{ hashFiles('.template.config/template.json') != '' }}
         run: |
           ./scripts/new-project.sh Example.Inventory "$RUNNER_TEMP/Example.Inventory"
